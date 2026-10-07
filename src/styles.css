@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Vazirmatn", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-bg: #09090b;
+  --color-surface: #121214;
+  --color-elevated: #1a1a1e;
+  --color-fg: #f1f2f4;
+  --color-muted: #9a9aa3;
+  --color-subtle: #6e6e77;
+  --color-border: rgb(241 242 244 / 0.1);
+  --color-border-strong: rgb(241 242 244 / 0.18);
+  --color-accent: #d2d7de;
+  --color-accent-fg: #0a0a0b;
+  --color-up: #3f9d78;
+  --color-up-dim: rgb(63 157 120 / 0.14);
+  --color-down: #c45c5c;
+  --color-down-dim: rgb(196 92 92 / 0.14);
+  --color-warn: #b08948;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow-border: 0 0 0 1px rgb(241 242 244 / 0.08);
+  --shadow-border-hover: 0 0 0 1px rgb(241 242 244 / 0.14);
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.desk-grid {
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(to bottom, rgb(241 242 244 / 0.035) 1px, transparent 1px),
+    linear-gradient(to left, rgb(241 242 244 / 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center top;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(241 242 244 / 0.06) 45%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  animation: shimmer-sweep 1.4s linear infinite;
+}
+
+@keyframes shimmer-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "آلفا اسپات",
+      "hasCanvas": false,
+      "bodyTextLen": 1792,
+      "bodyTextHash": "3928dd86eff3010d72d89bab1953a81cef26d7b92e02ce7003cd0298d7f6dbb7",
+      "bodyTextPrefix": "میز اسپات · معیار جفت بیت‌کوین آلفا اسپات یک دکمه، صد ارز اول با",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "آلفا اسپات",
+      "hasCanvas": false,
+      "bodyTextLen": 1792,
+      "bodyTextHash": "3928dd86eff3010d72d89bab1953a81cef26d7b92e02ce7003cd0298d7f6dbb7",
+      "bodyTextPrefix": "میز اسپات · معیار جفت بیت‌کوین آلفا اسپات یک دکمه، صد ارز اول با",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
