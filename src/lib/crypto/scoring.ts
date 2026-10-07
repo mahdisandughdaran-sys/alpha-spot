@@ -1,42 +1,52 @@
-import type { CoinRow, FactorKey, FactorScore, Regime } from "./types";
+import type {
+  CoinDraft,
+  CoinRow,
+  FactorKey,
+  FactorScore,
+  Regime,
+} from "./types.ts";
+import { isHot, lookupMeta } from "./catalog.ts";
 import {
   clamp,
+  detectWeeklyStructure,
   distFromHigh,
   lookback,
   maxDrawdown,
   percentileRank,
   rsi,
   sma,
+  ema,
   stdev,
   dailyReturns,
   tanhScore,
-} from "./math";
+  obvIsRising,
+} from "./math.ts";
 
 export const FACTOR_WEIGHTS: Record<FactorKey, number> = {
-  rs: 0.26,
-  trend: 0.18,
-  entry: 0.24,
-  liquidity: 0.16,
-  risk: 0.16,
+  rs: 0.22,
+  tokenomics: 0.16,
+  entry: 0.16,
+  trend: 0.16,
+  liquidity: 0.14,
+  risk: 0.1,
+  narrative: 0.06,
 };
 
 export const FACTOR_LABELS: Record<FactorKey, string> = {
   rs: "قدرت نسبی به بیت‌کوین",
-  trend: "کیفیت روند",
+  tokenomics: "توکنومیکس · MC/FDV",
   entry: "موقعیت ورود",
+  trend: "روند کلان",
   liquidity: "نقدشوندگی اسپات",
   risk: "بازده به ریسک",
+  narrative: "روایت و ارزش‌افزایی",
 };
 
-type Draft = Omit<CoinRow, "score" | "factors"> & {
-  pairCloses: number[];
-};
+export function factorWeightSum(): number {
+  return Object.values(FACTOR_WEIGHTS).reduce((a, b) => a + b, 0);
+}
 
-function factor(
-  key: FactorKey,
-  score: number,
-  note: string,
-): FactorScore {
+function factor(key: FactorKey, score: number, note: string): FactorScore {
   return {
     key,
     label: FACTOR_LABELS[key],
@@ -117,44 +127,58 @@ function pullbackScore(dist: number | null, athDd: number | null): {
   return { score: 55, note: "فاصله از اوج مشخص نبود." };
 }
 
-export function enrichFromKlines(draft: Draft): Draft {
+export function enrichFromKlines(draft: CoinDraft): CoinDraft {
   const closes = draft.pairCloses;
-  if (closes.length < 8) return { ...draft, hasKlines: false };
+  const usd = draft.usdCloses;
+  const vols = draft.usdVolumes;
+  const klineDays = Math.max(closes.length, usd.length);
 
-  const rs7 = lookback(closes, 7);
+  const rs7 = closes.length >= 8 ? lookback(closes, 7) : null;
   const rs14 = lookback(closes, 14);
-  const rs30 = lookback(closes, Math.min(29, closes.length - 1));
+  const rs30 = lookback(closes, Math.min(29, Math.max(1, closes.length - 1)));
   const rsi14 = rsi(closes, 14);
-  const rets = dailyReturns(closes);
-  const vol = stdev(rets);
-  const dd = maxDrawdown(closes);
-  const dist = distFromHigh(closes);
+  const rets = closes.length >= 8 ? dailyReturns(closes.slice(-31)) : [];
+  const vol = rets.length >= 5 ? stdev(rets) : null;
+  const dd = closes.length >= 8 ? maxDrawdown(closes.slice(-31)) : null;
+  const dist = closes.length >= 8 ? distFromHigh(closes.slice(-31)) : null;
   const s10 = sma(closes, Math.min(10, closes.length));
-  const last = closes[closes.length - 1];
-  const aboveSma = s10 != null && last != null ? last >= s10 : null;
+  const lastPair = closes[closes.length - 1];
+  const aboveSma = s10 != null && lastPair != null ? lastPair >= s10 : null;
 
-  const first = closes[0] ?? 1;
-  const pairSeries = closes.map((v, i) => ({
+  const ema200 = ema(usd, 200);
+  const lastUsd = usd[usd.length - 1];
+  const aboveEma200 =
+    ema200 != null && lastUsd != null ? lastUsd >= ema200 : null;
+  const weeklyStructure = usd.length >= 56 ? detectWeeklyStructure(usd) : null;
+  const obvRising = usd.length >= 15 && vols.length >= 15 ? obvIsRising(usd, vols) : null;
+
+  const window = closes.slice(-31);
+  const first = window[0] ?? 1;
+  const pairSeries = window.map((v, i) => ({
     t: i,
     v: first ? (v / first) * 100 : 100,
   }));
 
   return {
     ...draft,
-    hasKlines: true,
+    hasKlines: closes.length >= 8,
+    klineDays,
     rs7d: rs7 ?? draft.rs7d,
-    rs14d: rs14,
-    rs30d: rs30,
+    rs14d: rs14 ?? draft.rs14d,
+    rs30d: rs30 ?? draft.rs30d,
     rsi14,
     volatility30d: vol,
     maxDrawdown30d: dd,
     distFrom30dHighPct: dist,
     aboveSma,
+    aboveEma200,
+    weeklyStructure,
+    obvRising,
     pairSeries,
   };
 }
 
-export function detectRegime(rows: Draft[], btcDominance: number): {
+export function detectRegime(rows: CoinDraft[], btcDominance: number): {
   regime: Regime;
   medianRs7: number;
   note: string;
@@ -205,7 +229,7 @@ function pct(x: number): string {
   return `${sign}${v.toFixed(1)}٪`;
 }
 
-export function scoreUniverse(drafts: Draft[], regime: Regime): CoinRow[] {
+export function scoreUniverse(drafts: CoinDraft[], regime: Regime): CoinRow[] {
   const rsBlend = drafts.map((d) => blendRs(d));
   const sharpe = drafts.map((d) => sharpeLike(d));
   const vols = drafts.map((d) => d.volume24h);
@@ -214,10 +238,12 @@ export function scoreUniverse(drafts: Draft[], regime: Regime): CoinRow[] {
   return drafts.map((d, i) => {
     const factors = [
       scoreRs(d, rsBlend[i] ?? 0, rsBlend),
+      scoreTokenomics(d),
       scoreTrend(d),
       scoreEntry(d),
       scoreLiquidity(d, vols, turns),
       scoreRisk(d, sharpe[i] ?? 0, sharpe),
+      scoreNarrative(d),
     ];
 
     let score = factors.reduce((s, f) => s + f.score * f.weight, 0);
@@ -231,8 +257,12 @@ export function scoreUniverse(drafts: Draft[], regime: Regime): CoinRow[] {
 
     if (d.volume24h < 8_000_000) score -= 8;
     if (!d.hasKlines) score -= 4;
+    if (d.mcFdv != null && d.mcFdv < 0.5 && d.symbol !== "BTC" && d.symbol !== "ETH") {
+      score -= 5;
+    }
+    if (d.aboveEma200 === false && d.weeklyStructure === "bear") score -= 4;
 
-    const { pairCloses: _pairCloses, ...rest } = d;
+    const { pairCloses: _p, usdCloses: _u, usdVolumes: _v, ...rest } = d;
     return {
       ...rest,
       score: clamp(score),
@@ -245,21 +275,21 @@ function capRs(x: number, cap = 0.35): number {
   return Math.max(-cap, Math.min(cap, x));
 }
 
-function blendRs(d: Draft): number {
+function blendRs(d: CoinDraft): number {
   const a = capRs(d.rs7d);
   const b = capRs(d.rs14d ?? d.rs7d);
   const c = capRs(d.rs30d ?? d.rs7d);
   return 0.5 * a + 0.25 * b + 0.25 * c;
 }
 
-function sharpeLike(d: Draft): number {
+function sharpeLike(d: CoinDraft): number {
   const ret = d.rs30d ?? d.rs7d;
   const vol = d.volatility30d;
   if (vol && vol > 0) return ret / vol;
   return ret / 0.08;
 }
 
-function scoreRs(d: Draft, blend: number, all: number[]): FactorScore {
+function scoreRs(d: CoinDraft, blend: number, all: number[]): FactorScore {
   const p = percentileRank(blend, all);
   const abs = tanhScore(blend, 0.12, 50);
   let score = 0.55 * p + 0.45 * abs;
@@ -277,7 +307,39 @@ function scoreRs(d: Draft, blend: number, all: number[]): FactorScore {
   return factor("rs", score, note);
 }
 
-function scoreTrend(d: Draft): FactorScore {
+function scoreTokenomics(d: CoinDraft): FactorScore {
+  const bits: string[] = [];
+  let score = 55;
+  if (d.mcFdv != null) {
+    const pctPts = d.mcFdv * 100;
+    if (d.mcFdv >= 0.7) {
+      score = 92;
+      bits.push(`نسبت MC/FDV ${pctPts.toFixed(0)}٪ — عرضه رقیق‌شده نزدیک گردش است.`);
+    } else if (d.mcFdv >= 0.5) {
+      score = 70;
+      bits.push(`MC/FDV ${pctPts.toFixed(0)}٪ — قابل قبول، ولی آزادسازی هنوز اثر دارد.`);
+    } else if (d.mcFdv >= 0.35) {
+      score = 38;
+      bits.push(`MC/FDV ${pctPts.toFixed(0)}٪ — کمتر از نصف تا ۷۰٪ توکن‌ها در گردش است.`);
+    } else {
+      score = 16;
+      bits.push(`MC/FDV ${pctPts.toFixed(0)}٪ — فشار فروش آزادسازی ساختاری است.`);
+    }
+  } else if (d.symbol === "ETH") {
+    score = 84;
+    bits.push("اتریوم سقف عرضه ثابت ندارد؛ ارزش از سوزاندن کارمزد و استیک می‌آید.");
+  } else {
+    score = 48;
+    bits.push("سقف عرضه در داده نبود؛ امتیاز توکنومیکس خنثی ماند.");
+  }
+  if (d.symbol === "BTC") {
+    score = Math.max(score, 94);
+    bits.push("سقف ۲۱ میلیون مشخص و قابل حسابرسی است.");
+  }
+  return factor("tokenomics", score, bits.join(" "));
+}
+
+function scoreTrend(d: CoinDraft): FactorScore {
   let score = 50;
   const bits: string[] = [];
   const trend7 = d.symbol === "BTC" ? d.pct7d / 100 : d.rs7d;
@@ -287,61 +349,71 @@ function scoreTrend(d: Draft): FactorScore {
         trend7)
       : (d.rs30d ?? d.rs7d);
 
+  if (d.aboveEma200 === true) {
+    score += 14;
+    bits.push("قیمت دلار بالای EMA ۲۰۰ روزانه است");
+  } else if (d.aboveEma200 === false) {
+    score -= 12;
+    bits.push("زیر EMA ۲۰۰ روزانه — روند دلاری فرسایشی");
+  }
+
+  if (d.weeklyStructure === "bull") {
+    score += 14;
+    bits.push("ساختار هفتگی صعودی (کف و سقف بالاتر / شکست)");
+  } else if (d.weeklyStructure === "bear") {
+    score -= 12;
+    bits.push("ساختار هفتگی نزولی");
+  } else if (d.weeklyStructure === "range") {
+    bits.push("هفتگی در ناحیه انباشت/رنج");
+  }
+
   if (d.aboveSma === true) {
-    score += 16;
+    score += 8;
     bits.push(
       d.symbol === "BTC"
-        ? "قیمت بالای میانگین ۱۰ روزه است"
-        : "قیمت جفت BTC بالای میانگین ۱۰ روزه است",
+        ? "بالای میانگین ۱۰ روزه"
+        : "جفت BTC بالای میانگین ۱۰ روزه",
     );
   } else if (d.aboveSma === false) {
-    score -= 10;
+    score -= 6;
     bits.push("زیر میانگین ۱۰ روزه");
   }
 
   const s7 = Math.sign(trend7);
   const s30 = Math.sign(trend30);
   if (s7 > 0 && s30 > 0) {
-    score += 14;
+    score += 8;
     bits.push("۷ و ۳۰ روز هر دو مثبت‌اند");
   } else if (s7 < 0 && s30 < 0) {
-    score -= 12;
+    score -= 8;
     bits.push("۷ و ۳۰ روز هر دو منفی‌اند");
-  } else if (s7 === 0 && s30 === 0) {
-    score += 4;
-    bits.push("معیار بازار است");
-  } else {
-    score += 2;
-    bits.push("افق‌ها هم‌جهت نیستند");
   }
 
-  const short =
-    Math.sign(d.pct1h) + Math.sign(d.pct6h) + Math.sign(d.pct12h) + Math.sign(d.pct24h);
-  if (short >= 3 && d.rs7d > 0) {
-    score += 10;
-    bits.push("تایم‌فریم‌های کوتاه با روند ۷ روز هم‌جهت‌اند");
-  } else if (short <= -3 && d.rs7d > 0) {
+  if (d.obvRising === true) {
+    score += 8;
+    bits.push("OBV در حال افزایش — حجم از روند حمایت می‌کند");
+  } else if (d.obvRising === false) {
     score -= 6;
-    bits.push("اصلاح کوتاه‌مدت داخل روند ۷ روزه");
+    bits.push("OBV هم‌جهت نیست");
   }
 
   if (d.volumeChange24h > 15 && d.pct24h > 0) {
-    score += 8;
+    score += 6;
     bits.push("حجم با رشد قیمت آمده");
   } else if (d.volumeChange24h < -20 && d.pct24h > 2) {
-    score -= 8;
+    score -= 6;
     bits.push("رشد قیمت بدون حجم");
   }
 
   if (!d.hasKlines) {
     score -= 6;
-    bits.push("بدون کندل ۳۰ روزه؛ روند با دادهٔ کوتاه‌مدت تخمین زده شد");
+    bits.push("بدون کندل کافی؛ روند با دادهٔ کوتاه‌مدت تخمین زده شد");
   }
 
   return factor("trend", score, bits.join("؛ ") || "روند متوسط.");
 }
 
-function scoreEntry(d: Draft): FactorScore {
+function scoreEntry(d: CoinDraft): FactorScore {
   const reversal = d.pct6h > 0 && d.pct24h > 0;
   const rsiPart = rsiEntryScore(d.rsi14, reversal);
   const pb = pullbackScore(d.distFrom30dHighPct, d.athDrawdownPct);
@@ -369,7 +441,7 @@ function scoreEntry(d: Draft): FactorScore {
 }
 
 function scoreLiquidity(
-  d: Draft,
+  d: CoinDraft,
   vols: number[],
   turns: number[],
 ): FactorScore {
@@ -378,17 +450,23 @@ function scoreLiquidity(
   const abs = tanhScore(Math.log10(Math.max(d.volume24h, 1) / 1e7), 1.6, 48);
   let score = 0.5 * abs + 0.3 * volP + 0.2 * turnP;
   if (d.hasBtcPair) score += 7;
+  if (d.turnover >= 0.02) score += 10;
+  else if (d.turnover < 0.008) score -= 10;
   const volM = d.volume24h / 1e6;
   const turnPct = d.turnover * 100;
   const pair = d.hasBtcPair ? "جفت BTC واقعی روی بایننس دارد" : "جفت BTC مستقیم روی بایننس نیست";
+  const depth =
+    d.turnover >= 0.02
+      ? "گردش روزانه بالای ۲٪ مارکت‌کپ است."
+      : "گردش زیر آستانه ۲٪ است؛ خروج ممکن است لغزش داشته باشد.";
   return factor(
     "liquidity",
     score,
-    `حجم ۲۴س ${volM.toFixed(0)} میلیون دلار، گردش ${turnPct.toFixed(2)}٪ از مارکت‌کپ. ${pair}.`,
+    `حجم ۲۴س ${volM.toFixed(0)} میلیون دلار، گردش ${turnPct.toFixed(2)}٪ از مارکت‌کپ. ${pair}. ${depth}`,
   );
 }
 
-function scoreRisk(d: Draft, sh: number, all: number[]): FactorScore {
+function scoreRisk(d: CoinDraft, sh: number, all: number[]): FactorScore {
   const p = percentileRank(sh, all);
   let score = p;
   const bits: string[] = [];
@@ -423,6 +501,40 @@ function scoreRisk(d: Draft, sh: number, all: number[]): FactorScore {
   return factor("risk", score, bits.join("؛ ") || "ریسک متوسط مجموعه.");
 }
 
+function scoreNarrative(d: CoinDraft): FactorScore {
+  const meta = lookupMeta(d.symbol);
+  let score = 46;
+  const bits: string[] = [];
+  const tags = d.narrativeTags.length ? d.narrativeTags : meta.tags;
+  const tagsFa = d.narrativeTagsFa.length ? d.narrativeTagsFa : meta.tagsFa;
+  const accrual = d.accrual || meta.accrual;
+
+  if (tagsFa.length) bits.push(`روایت: ${tagsFa.join("، ")}`);
+  if (isHot(tags)) {
+    score += 20;
+    bits.push("در ترند فعال بازار است");
+  } else if (tags.length) {
+    score += 6;
+  } else {
+    bits.push(meta.note);
+  }
+
+  if (accrual === "real-yield" || accrual === "burn" || accrual === "store-of-value") {
+    score += 18;
+  } else if (accrual === "staking") {
+    score += 10;
+  } else if (accrual === "governance") {
+    score += 2;
+    bits.push("عمدتاً حاکمیتی است و ارزش مالی مستقیم کمی دارد");
+  } else {
+    score -= 6;
+    bits.push("مکانیزم ارزش‌افزایی مالی ضعیف است");
+  }
+  if (d.accrualNote) bits.push(d.accrualNote);
+
+  return factor("narrative", score, bits.join("؛ "));
+}
+
 export function pickWinner(
   ranked: CoinRow[],
   regime: Regime,
@@ -430,6 +542,13 @@ export function pickWinner(
   const eligible = ranked.filter((r) => {
     if (r.volume24h < 8_000_000) return false;
     if (r.rank > 100) return false;
+    if (
+      r.symbol !== "BTC" &&
+      r.mcFdv != null &&
+      r.mcFdv < 0.32
+    ) {
+      return false;
+    }
     if (
       r.symbol !== "BTC" &&
       r.distFrom30dHighPct != null &&

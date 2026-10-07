@@ -1,0 +1,38 @@
+
+> dev
+> node scripts/with-app-env.mjs vite dev --host 0.0.0.0 --port 8080
+
+
+  VITE v8.3.2  ready in 1534 ms
+
+  ➜  Local:   http://localhost:8080/
+  ➜  Network: http://172.16.0.2:8080/  eth0
+1:46:17 PM [vite] (ssr) connected.
+1:46:18 PM [vite] (client) [optimizer] bundling dependencies...
+Error: aborted
+    at abortIncoming (node:_http_server:838:17)
+    ... 3 lines matching cause stack trace ...
+    at TCP.callbackTrampoline (node:internal/async_hooks:130:17) {
+  cause: Error: aborted
+      at abortIncoming (node:_http_server:838:17)
+      at socketOnClose (node:_http_server:832:3)
+      at Socket.emit (node:events:531:35)
+      at TCP.<anonymous> (node:net:347:12)
+      at TCP.callbackTrampoline (node:internal/async_hooks:130:17) {
+    code: 'ECONNRESET'
+  },
+  status: 500,
+  statusText: undefined,
+  headers: undefined,
+  data: undefined,
+  body: undefined,
+  unhandled: true
+}
+1:46:33 PM [vite] (client) [optimizer] bundling dependencies...
+1:46:34 PM [vite] (client) dependencies optimized: @tanstack/router-core, @tanstack/router-core/isServer, @tanstack/router-core/ssr/client, seroval
+1:48:47 PM [vite] (client) hmr update /src/styles.css?direct
+1:48:47 PM [vite] (ssr) hmr update /src/lib/crypto/analyze.ts?tss-serverfn-split
+1:48:47 PM [vite] (ssr) hot updated: /src/lib/crypto/analyze.ts?tss-serverfn-split
+1:48:49 PM [vite] (client) hmr update /src/styles.css?direct
+1:48:49 PM [vite] (ssr) hmr update /src/lib/crypto/analyze.ts?tss-serverfn-split
+1:48:49 PM [vite] (ssr) hot updated: /src/lib/crypto/analyze.ts?tss-serverfn-split

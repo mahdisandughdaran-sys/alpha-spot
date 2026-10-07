@@ -1,8 +1,14 @@
 import { Bitcoin, ShieldAlert, ArrowUpRight } from "lucide-react";
 import type { AnalysisResult } from "@/lib/crypto/types";
-import { btcPriceLabel, confidenceTitle, regimeTitle } from "@/lib/crypto/explain";
+import {
+  btcPriceLabel,
+  confidenceTitle,
+  dominanceTitle,
+  regimeTitle,
+} from "@/lib/crypto/explain";
 import { Badge } from "@/components/ui/badge";
 import { BtcPairChart } from "./btc-chart";
+import { ChecklistCard } from "./checklist-card";
 import { FactorBars } from "./factor-bars";
 import { formatPct, formatPctPoints, formatScore, formatUsd, timeAgoFa } from "./format";
 
@@ -16,6 +22,10 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
   const { pick, runnerUp } = result;
   const confTone =
     result.confidence === "high" ? "up" : result.confidence === "low" ? "down" : "neutral";
+  const coverage =
+    result.klinesTried > 0
+      ? Math.round((result.klinesOk / result.universeSize) * 100)
+      : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -25,9 +35,21 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
           دامیننس BTC
           <span className="num ms-1">{result.btcDominance.toFixed(1)}٪</span>
         </Badge>
+        <Badge
+          tone={
+            result.dominanceBias === "falling"
+              ? "up"
+              : result.dominanceBias === "rising"
+                ? "down"
+                : "neutral"
+          }
+        >
+          {dominanceTitle(result.dominanceBias)}
+        </Badge>
         <Badge tone={confTone}>{confidenceTitle(result.confidence)}</Badge>
         <span className="text-xs text-subtle">
-          به‌روز {timeAgoFa(result.generatedAt)} · {result.sources.join(" + ")}
+          به‌روز {timeAgoFa(result.generatedAt)} · {result.sources.join(" + ")} · کندل{" "}
+          <span className="num">{coverage}٪</span>
         </span>
       </div>
 
@@ -50,6 +72,12 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
                   <span className="mx-2 text-subtle">·</span>
                   رتبه بازار
                   <span className="num ms-1">#{pick.rank}</span>
+                  {pick.narrativeTagsFa[0] ? (
+                    <>
+                      <span className="mx-2 text-subtle">·</span>
+                      {pick.narrativeTagsFa[0]}
+                    </>
+                  ) : null}
                 </p>
               </div>
             </div>
@@ -75,12 +103,61 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
             value={pick.rs30d == null ? "—" : formatPct(pick.rs30d)}
             tone={pick.rs30d == null ? "neutral" : toneFor(pick.rs30d)}
           />
+          <Stat
+            label="MC / FDV"
+            value={pick.mcFdv == null ? "—" : `${(pick.mcFdv * 100).toFixed(0)}٪`}
+            tone={
+              pick.mcFdv == null
+                ? "neutral"
+                : pick.mcFdv >= 0.7
+                  ? "up"
+                  : pick.mcFdv < 0.5
+                    ? "down"
+                    : "neutral"
+            }
+          />
+          <Stat
+            label="EMA ۲۰۰"
+            value={
+              pick.aboveEma200 === true
+                ? "بالا"
+                : pick.aboveEma200 === false
+                  ? "پایین"
+                  : "—"
+            }
+            tone={
+              pick.aboveEma200 === true
+                ? "up"
+                : pick.aboveEma200 === false
+                  ? "down"
+                  : "neutral"
+            }
+          />
+          <Stat
+            label="ساختار هفتگی"
+            value={
+              pick.weeklyStructure === "bull"
+                ? "صعودی"
+                : pick.weeklyStructure === "bear"
+                  ? "نزولی"
+                  : pick.weeklyStructure === "range"
+                    ? "رنج"
+                    : "—"
+            }
+          />
+          <Stat
+            label="گردش ۲۴س"
+            value={`${(pick.turnover * 100).toFixed(2)}٪`}
+            tone={pick.turnover >= 0.02 ? "up" : "neutral"}
+          />
         </dl>
 
         <p className="mt-5 max-w-3xl text-sm leading-relaxed text-muted">
           {result.confidenceNote}
         </p>
       </section>
+
+      <ChecklistCard items={result.checklist} />
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <section className="min-w-0 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-6">
@@ -143,7 +220,7 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
       <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-6">
         <h3 className="text-base font-medium text-fg">تجزیه امتیاز</h3>
         <p className="mt-1 text-xs text-subtle">
-          هر فاکتور از ۰ تا ۱۰۰ است. وزن‌ها ثابت‌اند تا مدل قابل‌حسابرسی باشد.
+          هفت فاکتور از ۰ تا ۱۰۰. وزن‌ها ثابت‌اند تا مدل قابل‌حسابرسی باشد.
         </p>
         <div className="mt-5">
           <FactorBars factors={pick.factors} />

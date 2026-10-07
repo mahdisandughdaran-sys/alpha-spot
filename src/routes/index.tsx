@@ -1,22 +1,33 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HistoryPanel } from "@/components/desk/history-panel";
 import { Leaderboard } from "@/components/desk/leaderboard";
 import { Methodology } from "@/components/desk/methodology";
 import { PickPanel } from "@/components/desk/pick-panel";
+import { PortfolioPanel } from "@/components/desk/portfolio-panel";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
+import {
+  loadHistory,
+  loadWatch,
+  saveRun,
+  toggleWatch,
+  type RunSummary,
+} from "@/lib/crypto/history";
 import type { AnalysisResult } from "@/lib/crypto/types";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 const STAGES = [
-  "گرفتن رتبه و حجم صد ارز برتر",
-  "ساخت قیمت بر حسب جفت بیت‌کوین",
-  "محاسبه RSI، اصلاح و بازده به ریسک",
-  "وزن‌دهی فاکتورها و انتخاب نهایی",
+  "گرفتن رتبه، عرضه و حجم صد ارز برتر",
+  "ساخت جفت بیت‌کوین و کندل ۲۰۰ روزه",
+  "MC/FDV، EMA ۲۰۰، ساختار هفتگی و OBV",
+  "وزن‌دهی فاکتورها، چک‌لیست و پرتفوی",
 ];
+
+type Tab = "pick" | "table" | "portfolio" | "method" | "history";
 
 function Home() {
   const run = useServerFn(runSpotAnalysis);
@@ -24,7 +35,14 @@ function Home() {
   const [stage, setStage] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"pick" | "table" | "method">("pick");
+  const [tab, setTab] = useState<Tab>("pick");
+  const [history, setHistory] = useState<RunSummary[]>([]);
+  const [watched, setWatched] = useState<string[]>([]);
+
+  useEffect(() => {
+    setHistory(loadHistory());
+    setWatched(loadWatch());
+  }, []);
 
   async function onAnalyze() {
     setStatus("loading");
@@ -33,10 +51,11 @@ function Home() {
     setTab("pick");
     const timer = window.setInterval(() => {
       setStage((s) => Math.min(s + 1, STAGES.length - 1));
-    }, 900);
+    }, 1100);
     try {
       const data = await run();
       setResult(data);
+      setHistory(saveRun(data));
       setStatus("done");
     } catch (err) {
       setStatus("error");
@@ -48,7 +67,7 @@ function Home() {
 
   const headerMeta = useMemo(() => {
     if (!result) return null;
-    return `${result.universeSize} ارز از صد تای اول بازار — استیبل و رپد حذف شده`;
+    return `${result.universeSize} ارز از صد تای اول — استیبل و رپد حذف شده · ${result.klinesOk} کندل کامل`;
   }, [result]);
 
   return (
@@ -57,7 +76,7 @@ function Home() {
         <header className="flex flex-col gap-6">
           <div className="flex items-center gap-2 text-xs text-subtle">
             <Activity className="size-3.5" />
-            میز اسپات · معیار جفت بیت‌کوین
+            میز اسپات · جفت بیت‌کوین · توکنومیکس
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
@@ -65,8 +84,9 @@ function Home() {
                 آلفا اسپات
               </h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
-                یک دکمه، صد ارز اول بازار. قبل از دلار، هر دارایی روی جفت بیت‌کوین
-                سنجیده می‌شود تا بهترین خرید اسپات — یا خود بیت‌کوین — مشخص شود.
+                یک دکمه، صد ارز اول بازار. هر دارایی روی جفت بیت‌کوین، نسبت
+                MC/FDV، روند هفتگی و نقدشوندگی سنجیده می‌شود تا بهترین خرید اسپات
+                — یا خود بیت‌کوین — مشخص شود.
               </p>
             </div>
             <Button
@@ -99,7 +119,7 @@ function Home() {
               <div className="shimmer h-full w-2/3 rounded-full bg-accent/40" />
             </div>
             <p className="mt-3 text-xs text-subtle">
-              داده زنده گرفته می‌شود؛ معمولاً چند ثانیه طول می‌کشد.
+              کندل ۲۰۰ روزه برای EMA و ساختار هفتگی گرفته می‌شود؛ کمی بیشتر از قبل طول می‌کشد.
             </p>
           </section>
         ) : null}
@@ -116,12 +136,14 @@ function Home() {
 
         {status === "done" && result ? (
           <>
-            <nav className="flex gap-1 rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
+            <nav className="flex gap-1 overflow-x-auto rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
               {(
                 [
                   ["pick", "انتخاب"],
                   ["table", "رتبه‌ها"],
+                  ["portfolio", "پرتفوی"],
                   ["method", "روش"],
+                  ["history", "سابقه"],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -130,8 +152,8 @@ function Home() {
                   onClick={() => setTab(id)}
                   className={
                     tab === id
-                      ? "h-10 flex-1 rounded-md bg-elevated text-sm text-fg"
-                      : "h-10 flex-1 rounded-md text-sm text-muted hover:text-fg"
+                      ? "h-11 min-w-20 flex-1 rounded-md bg-elevated px-3 text-sm text-fg"
+                      : "h-11 min-w-20 flex-1 rounded-md px-3 text-sm text-muted hover:text-fg"
                   }
                 >
                   {label}
@@ -140,9 +162,18 @@ function Home() {
             </nav>
             {tab === "pick" ? <PickPanel result={result} /> : null}
             {tab === "table" ? (
-              <Leaderboard rows={result.top} picked={result.pick.symbol} />
+              <Leaderboard
+                rows={result.top}
+                picked={result.pick.symbol}
+                watched={watched}
+                onToggleWatch={(symbol) => setWatched(toggleWatch(symbol))}
+              />
+            ) : null}
+            {tab === "portfolio" ? (
+              <PortfolioPanel sleeves={result.portfolio} />
             ) : null}
             {tab === "method" ? <Methodology /> : null}
+            {tab === "history" ? <HistoryPanel runs={history} /> : null}
           </>
         ) : null}
 
@@ -158,7 +189,7 @@ function Home() {
 function IdleState() {
   return (
     <div className="flex flex-col gap-6">
-      <ul className="grid gap-3 md:grid-cols-3">
+      <ul className="grid gap-3 sm:grid-cols-2">
         <IdleCard
           k="۰۱"
           t="جفت BTC"
@@ -166,13 +197,18 @@ function IdleState() {
         />
         <IdleCard
           k="۰۲"
-          t="نخریدن سقف"
-          d="RSI و فاصله از اوج ۳۰ روزه جلوِ خرید هیجانی را می‌گیرند. قدرت نسبیِ داغ بدون نقطه ورود خوب، برنده نیست."
+          t="MC / FDV"
+          d="اگر کمتر از نیمی از توکن‌ها در گردش باشد، آزادسازی فشار فروش می‌سازد. اولویت با نسبت بالای ۰٫۷ است."
         />
         <IdleCard
           k="۰۳"
-          t="بیت، اگر آلت ضعیف باشد"
-          d="در فصل بیت‌کوین مدل اجازه می‌دهد خود BTC بهترین خرید اسپات باشد. تعصب روی آلت ندارد."
+          t="روند کلان، نه سقف"
+          d="EMA ۲۰۰، ساختار هفتگی و RSI جلوِ خرید هیجانی را می‌گیرند. قدرت نسبی داغ بدون نقطه ورود، برنده نیست."
+        />
+        <IdleCard
+          k="۰۴"
+          t="هسته پرتفوی"
+          d="۵۵٪ بیت‌کوین و اتریوم، ۳۰٪ لارج‌کپ، ۱۵٪ میدکپ. اگر آلت‌ها ضعیف باشند خود بیت برنده است."
         />
       </ul>
       <Methodology />

@@ -78,6 +78,19 @@ export function sma(closes: number[], period: number): number | null {
   return mean(slice);
 }
 
+export function ema(closes: number[], period: number): number | null {
+  if (closes.length < period) return null;
+  const k = 2 / (period + 1);
+  let prev = 0;
+  for (let i = 0; i < period; i++) prev += closes[i] ?? 0;
+  prev /= period;
+  for (let i = period; i < closes.length; i++) {
+    const price = closes[i] ?? 0;
+    prev = (price - prev) * k + prev;
+  }
+  return prev;
+}
+
 export function percentileRank(value: number, all: number[]): number {
   if (all.length <= 1) return 50;
   let less = 0;
@@ -111,4 +124,63 @@ export function distFromHigh(closes: number[]): number | null {
   if (last == null || last === 0) return null;
   const high = Math.max(...closes);
   return last / high - 1;
+}
+
+export function weeklyFromDaily(closes: number[]): number[] {
+  const out: number[] = [];
+  for (let end = closes.length; end >= 1; end -= 7) {
+    const bar = closes[end - 1];
+    if (bar != null) out.unshift(bar);
+  }
+  return out;
+}
+
+export function detectWeeklyStructure(
+  closes: number[],
+): "bull" | "bear" | "range" {
+  const w = weeklyFromDaily(closes);
+  if (w.length < 8) return "range";
+  const window = w.slice(-12);
+  const last = window[window.length - 1]!;
+  const prior = window.slice(0, -1);
+  const priorHigh = Math.max(...prior);
+  const priorLow = Math.min(...prior);
+  const split = Math.max(2, window.length - 4);
+  const older = window.slice(0, split);
+  const recent = window.slice(split);
+  const olderHigh = Math.max(...older);
+  const olderLow = Math.min(...older);
+  const recentHigh = Math.max(...recent);
+  const recentLow = Math.min(...recent);
+
+  if (last > priorHigh) return "bull";
+  if (last < priorLow) return "bear";
+  if (recentHigh >= olderHigh && recentLow >= olderLow) return "bull";
+  if (recentHigh <= olderHigh && recentLow <= olderLow) return "bear";
+  return "range";
+}
+
+export function obvSeries(closes: number[], volumes: number[]): number[] {
+  const n = Math.min(closes.length, volumes.length);
+  const out: number[] = [];
+  let acc = 0;
+  if (n === 0) return out;
+  out.push(0);
+  for (let i = 1; i < n; i++) {
+    if (closes[i]! > closes[i - 1]!) acc += volumes[i] ?? 0;
+    else if (closes[i]! < closes[i - 1]!) acc -= volumes[i] ?? 0;
+    out.push(acc);
+  }
+  return out;
+}
+
+export function obvIsRising(
+  closes: number[],
+  volumes: number[],
+): boolean | null {
+  const s = obvSeries(closes, volumes);
+  if (s.length < 15) return null;
+  const last = s[s.length - 1]!;
+  const avg = mean(s.slice(-10));
+  return last >= avg;
 }

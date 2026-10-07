@@ -1,4 +1,10 @@
-import type { AnalysisResult, CoinRow, Confidence, Regime } from "./types";
+import type {
+  AnalysisResult,
+  CoinRow,
+  Confidence,
+  DominanceBias,
+  Regime,
+} from "./types.ts";
 
 function pct(x: number, digits = 1): string {
   const v = x * 100;
@@ -26,16 +32,29 @@ export function confidenceOf(
   pick: CoinRow,
   runnerUp: CoinRow | null,
   hasDepth: boolean,
+  klinesOk: number,
+  universeSize: number,
 ): { confidence: Confidence; note: string } {
   const gap = runnerUp ? pick.score - runnerUp.score : 10;
   const rsiOk = pick.rsi14 == null || (pick.rsi14 >= 32 && pick.rsi14 <= 68);
   const liquid = pick.volume24h >= 20_000_000;
-  const aligned = pick.factors.filter((f) => f.score >= 60).length >= 4;
+  const aligned = pick.factors.filter((f) => f.score >= 60).length >= 5;
+  const coverage = universeSize > 0 ? klinesOk / universeSize : 0;
+  const tokenomicsOk = pick.mcFdv == null || pick.mcFdv >= 0.5;
 
-  if (pick.score >= 72 && gap >= 4 && hasDepth && rsiOk && liquid && aligned) {
+  if (
+    pick.score >= 72 &&
+    gap >= 4 &&
+    hasDepth &&
+    rsiOk &&
+    liquid &&
+    aligned &&
+    coverage >= 0.7 &&
+    tokenomicsOk
+  ) {
     return {
       confidence: "high",
-      note: "فاکتورها هم‌جهت‌اند، دادهٔ ۳۰ روزه کامل است و فاصله با گزینه دوم معنادار است.",
+      note: "فاکتورها هم‌جهت‌اند، کندل‌ها کامل است و فاصله با گزینه دوم معنادار است.",
     };
   }
   if (pick.score >= 60 && (hasDepth || gap >= 3)) {
@@ -56,11 +75,13 @@ export function explainPick(
   regime: Regime,
   regimeNote: string,
   btcPct7d: number,
+  extra?: { klinesOk: number; klinesTried: number; dominanceNote: string },
 ): { reasons: string[]; caution: string[] } {
   const reasons: string[] = [];
   const caution: string[] = [];
 
   reasons.push(regimeNote);
+  if (extra?.dominanceNote) reasons.push(extra.dominanceNote);
 
   if (pick.symbol === "BTC") {
     reasons.push(
@@ -81,12 +102,11 @@ export function explainPick(
 
   const entry = pick.factors.find((f) => f.key === "entry");
   const rs = pick.factors.find((f) => f.key === "rs");
-  const liq = pick.factors.find((f) => f.key === "liquidity");
-  const risk = pick.factors.find((f) => f.key === "risk");
+  const tok = pick.factors.find((f) => f.key === "tokenomics");
   const trend = pick.factors.find((f) => f.key === "trend");
+  if (tok) reasons.push(tok.note);
   if (entry) reasons.push(entry.note);
   if (rs && pick.symbol !== "BTC") reasons.push(rs.note);
-  if (liq) reasons.push(liq.note);
   if (trend) reasons.push(trend.note);
 
   if (pick.rsi14 != null && pick.rsi14 > 68) {
@@ -99,7 +119,18 @@ export function explainPick(
     caution.push("از اوج تاریخی خیلی فاصله دارد؛ ممکن است ارزش به‌دام‌افتاده باشد نه فرصت.");
   }
   if (!pick.hasKlines) {
-    caution.push("کندل ۳۰ روزه جفت BTC برای این ارز کامل نبود؛ افق بلندتر با قطعیت کمتر است.");
+    caution.push("کندل جفت BTC برای این ارز کامل نبود؛ افق بلندتر با قطعیت کمتر است.");
+  }
+  if (pick.mcFdv != null && pick.mcFdv < 0.5) {
+    caution.push(
+      `فقط ${(pick.mcFdv * 100).toFixed(0)}٪ توکن‌ها در گردش است؛ آزادسازی می‌تواند فشار فروش بسازد.`,
+    );
+  }
+  if (pick.aboveEma200 === false) {
+    caution.push("زیر EMA ۲۰۰ روزانه است؛ خرید اسپات در روند نزولی فرسایشی ریسک بیشتری دارد.");
+  }
+  if (pick.turnover < 0.02 && pick.symbol !== "BTC") {
+    caution.push("گردش روزانه زیر ۲٪ مارکت‌کپ است؛ ورود و خروج ممکن است لغزش داشته باشد.");
   }
   if (runnerUp && runnerUp.score > pick.score - 4) {
     caution.push(
@@ -109,11 +140,13 @@ export function explainPick(
   if (regime === "btc" && pick.symbol !== "BTC") {
     caution.push("رژیم کلی هنوز به نفع بیت‌کوین است؛ آلت باید دلیل مشخص داشته باشد که دارد.");
   }
-  if (risk && risk.score < 45) {
-    caution.push("بازده به ریسک این گزینه ضعیف‌تر از ظاهر قدرت نسبی‌اش است.");
+  if (extra && extra.klinesTried > 0 && extra.klinesOk / extra.klinesTried < 0.7) {
+    caution.push(
+      `فقط ${extra.klinesOk} از ${extra.klinesTried} ارز کندل کامل گرفتند؛ پوشش داده ناقص است.`,
+    );
   }
 
-  return { reasons: reasons.slice(0, 6), caution: caution.slice(0, 4) };
+  return { reasons: reasons.slice(0, 7), caution: caution.slice(0, 5) };
 }
 
 export function regimeTitle(regime: Regime): string {
@@ -126,6 +159,13 @@ export function confidenceTitle(c: Confidence): string {
   if (c === "high") return "اعتماد بالا";
   if (c === "medium") return "اعتماد متوسط";
   return "اعتماد محتاط";
+}
+
+export function dominanceTitle(b: DominanceBias): string {
+  if (b === "rising") return "دامیننس صعودی";
+  if (b === "falling") return "دامیننس کاهشی";
+  if (b === "resistance") return "دامیننس روی مقاومت";
+  return "دامیننس میانی";
 }
 
 export function sortFactors(row: CoinRow): AnalysisResult["pick"]["factors"] {

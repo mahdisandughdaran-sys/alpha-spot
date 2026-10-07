@@ -1,18 +1,22 @@
-import { BINANCE_SYMBOL, isNonSpotCandidate } from "./exclusions";
-import { vsBtc } from "./math";
+import { candidateBases, isNonSpotCandidate } from "./exclusions.ts";
+import { lookupMeta, mcFdvRatio } from "./catalog.ts";
+import { vsBtc } from "./math.ts";
 import {
   detectRegime,
   enrichFromKlines,
   pickWinner,
   scoreUniverse,
-} from "./scoring";
-import { confidenceOf, explainPick } from "./explain";
-import type { AnalysisResult, PairPoint } from "./types";
+} from "./scoring.ts";
+import { dominanceBiasOf, buildChecklist } from "./checklist.ts";
+import { buildPortfolio } from "./portfolio.ts";
+import { confidenceOf, explainPick } from "./explain.ts";
+import type { AnalysisResult, CoinDraft, PairPoint } from "./types.ts";
 
 const PAPRIKA = "https://api.coinpaprika.com/v1";
 const BINANCE = "https://data-api.binance.vision/api/v3";
 const CACHE_MS = 2 * 60 * 1000;
 const TARGET_UNIVERSE = 100;
+const KLINE_LIMIT = 220;
 
 type PaprikaQuote = {
   price: number;
@@ -24,6 +28,7 @@ type PaprikaQuote = {
   percent_change_12h: number;
   percent_change_24h: number;
   percent_change_7d: number;
+  percent_change_30d?: number;
   percent_from_price_ath: number | null;
 };
 
@@ -32,16 +37,15 @@ type PaprikaTicker = {
   name: string;
   symbol: string;
   rank: number;
+  total_supply: number | null;
+  max_supply: number | null;
+  circulating_supply?: number | null;
   beta_value: number | null;
   quotes: { USD: PaprikaQuote; BTC: PaprikaQuote };
 };
 
 type PaprikaGlobal = {
   bitcoin_dominance_percentage: number;
-};
-
-type BinanceTicker = {
-  symbol: string;
 };
 
 type CacheBox = { at: number; value: AnalysisResult };
@@ -55,11 +59,33 @@ async function fetchJson<T>(url: string, ms = 14000): Promise<T> {
       signal: ctrl.signal,
       headers: {
         Accept: "application/json",
-        "User-Agent": "AlphaSpot/1.0",
+        "User-Agent": "AlphaSpot/1.1",
       },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json()) as T;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type Maybe<T> = { ok: true; data: T } | { ok: false; status: number };
+
+async function fetchMaybe<T>(url: string, ms = 10000): Promise<Maybe<T>> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "AlphaSpot/1.1",
+      },
+    });
+    if (!res.ok) return { ok: false, status: res.status };
+    return { ok: true, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, status: 0 };
   } finally {
     clearTimeout(timer);
   }
@@ -84,30 +110,28 @@ async function mapPool<T, R>(
   return out;
 }
 
-function binanceBase(symbol: string): string {
-  return BINANCE_SYMBOL[symbol] ?? symbol;
-}
+type ParsedKlines = { times: number[]; closes: number[]; volumes: number[] };
 
-function parseKlines(raw: unknown): { times: number[]; closes: number[] } | null {
+function parseKlines(raw: unknown): ParsedKlines | null {
   if (!Array.isArray(raw) || raw.length < 8) return null;
   const times: number[] = [];
   const closes: number[] = [];
+  const volumes: number[] = [];
   for (const row of raw) {
     if (!Array.isArray(row)) continue;
     const t = Number(row[0]);
     const c = Number(row[4]);
+    const v = Number(row[5]);
     if (!Number.isFinite(t) || !Number.isFinite(c)) continue;
     times.push(t);
     closes.push(c);
+    volumes.push(Number.isFinite(v) ? v : 0);
   }
   if (closes.length < 8) return null;
-  return { times, closes };
+  return { times, closes, volumes };
 }
 
-function alignPair(
-  coin: { times: number[]; closes: number[] },
-  btc: { times: number[]; closes: number[] },
-): number[] {
+function alignPair(coin: ParsedKlines, btc: ParsedKlines): number[] {
   const map = new Map<number, number>();
   btc.times.forEach((t, i) => {
     const px = btc.closes[i];
@@ -126,24 +150,17 @@ export async function runAnalysis(): Promise<AnalysisResult> {
   const now = Date.now();
   if (cache && now - cache.at < CACHE_MS) return cache.value;
 
-  const [tickers, global, binanceTickers, btcKlines] = await Promise.all([
+  const [tickers, global] = await Promise.all([
     fetchJson<PaprikaTicker[]>(`${PAPRIKA}/tickers?quotes=USD,BTC&limit=180`),
     fetchJson<PaprikaGlobal>(`${PAPRIKA}/global`),
-    fetchJson<BinanceTicker[]>(`${BINANCE}/ticker/24hr`),
-    fetchJson<unknown>(`${BINANCE}/klines?symbol=BTCUSDT&interval=1d&limit=31`),
   ]);
-
-  const usdtBases = new Set<string>();
-  const btcBases = new Set<string>();
-  for (const t of binanceTickers) {
-    if (t.symbol.endsWith("USDT")) usdtBases.add(t.symbol.slice(0, -4));
-    if (t.symbol.endsWith("BTC")) btcBases.add(t.symbol.slice(0, -3));
-  }
 
   const btcTicker = tickers.find((t) => t.symbol === "BTC");
   if (!btcTicker) throw new Error("داده بیت‌کوین در دسترس نیست");
   const btcUsd = btcTicker.quotes.USD;
   const btcPct7d = (btcUsd.percent_change_7d || 0) / 100;
+  const btcPct30d =
+    btcUsd.percent_change_30d == null ? null : btcUsd.percent_change_30d / 100;
 
   const ranked = [...tickers]
     .filter((t) => typeof t.rank === "number" && t.rank > 0)
@@ -160,57 +177,98 @@ export async function runAnalysis(): Promise<AnalysisResult> {
     universe.push(t);
   }
 
-  const btcParsed = parseKlines(btcKlines);
+  let binanceOpen = true;
+  const btcKlineRes = await fetchMaybe<unknown>(
+    `${BINANCE}/klines?symbol=BTCUSDT&interval=1d&limit=${KLINE_LIMIT}`,
+    12000,
+  );
+  if (!btcKlineRes.ok) {
+    binanceOpen = false;
+  }
+  const btcParsed = btcKlineRes.ok ? parseKlines(btcKlineRes.data) : null;
+  if (!btcParsed) binanceOpen = false;
 
-  const klineNeed = universe
-    .map((t) => binanceBase(t.symbol.toUpperCase()))
-    .filter((s) => s !== "BTC" && usdtBases.has(s));
+  const klineNeed = universe.filter((t) => t.symbol.toUpperCase() !== "BTC");
+  type KlinePack = {
+    id: string;
+    pair: number[] | null;
+    usd: ParsedKlines | null;
+  };
 
-  const klineMap = new Map<string, number[]>();
-  if (btcParsed) {
-    const fetched = await mapPool(klineNeed, 14, async (sym) => {
-      try {
-        const raw = await fetchJson<unknown>(
-          `${BINANCE}/klines?symbol=${sym}USDT&interval=1d&limit=31`,
-          10000,
-        );
-        const parsed = parseKlines(raw);
-        if (!parsed) return { sym, pair: null as number[] | null };
-        const pair = alignPair(parsed, btcParsed);
-        return { sym, pair: pair.length >= 8 ? pair : null };
-      } catch {
-        return { sym, pair: null as number[] | null };
+  const klinesTried = binanceOpen ? klineNeed.length : 0;
+  const klineById = new Map<string, KlinePack>();
+  if (btcParsed && binanceOpen) {
+    const fetched = await mapPool(klineNeed, 8, async (ticker) => {
+      if (!binanceOpen) {
+        return { id: ticker.id, pair: null, usd: null } satisfies KlinePack;
       }
+      const symbol = ticker.symbol.toUpperCase();
+      const bases = candidateBases(symbol);
+      for (const sym of bases) {
+        const res = await fetchMaybe<unknown>(
+          `${BINANCE}/klines?symbol=${sym}USDT&interval=1d&limit=${KLINE_LIMIT}`,
+          9000,
+        );
+        if (!res.ok) {
+          if (res.status === 418 || res.status === 429) {
+            binanceOpen = false;
+            return { id: ticker.id, pair: null, usd: null } satisfies KlinePack;
+          }
+          continue;
+        }
+        const parsed = parseKlines(res.data);
+        if (!parsed) continue;
+        const pair = alignPair(parsed, btcParsed);
+        return {
+          id: ticker.id,
+          pair: pair.length >= 8 ? pair : null,
+          usd: parsed,
+        } satisfies KlinePack;
+      }
+      return { id: ticker.id, pair: null, usd: null } satisfies KlinePack;
     });
-    for (const row of fetched) {
-      if (row.pair) klineMap.set(row.sym, row.pair);
-    }
+    for (const row of fetched) klineById.set(row.id, row);
   }
 
-  type Draft = Parameters<typeof enrichFromKlines>[0];
-  const drafts: Draft[] = universe.map((t) => {
+  const drafts: CoinDraft[] = universe.map((t) => {
     const usd = t.quotes.USD;
     const btc = t.quotes.BTC;
     const symbol = t.symbol.toUpperCase();
-    const base = binanceBase(symbol);
+    const pack = klineById.get(t.id);
+    const pairCloses =
+      symbol === "BTC" && btcParsed ? btcParsed.closes : (pack?.pair ?? []);
+    const usdCloses =
+      symbol === "BTC" && btcParsed ? btcParsed.closes : (pack?.usd?.closes ?? []);
+    const usdVolumes =
+      symbol === "BTC" && btcParsed
+        ? btcParsed.volumes
+        : (pack?.usd?.volumes ?? []);
+
     const rs7d =
       symbol === "BTC" ? 0 : vsBtc(usd.percent_change_7d || 0, btcUsd.percent_change_7d || 0);
     const rs24h =
       symbol === "BTC"
         ? 0
         : vsBtc(usd.percent_change_24h || 0, btcUsd.percent_change_24h || 0);
-    const pairCloses =
-      symbol === "BTC" && btcParsed ? btcParsed.closes : (klineMap.get(base) ?? []);
-    const origin = pairCloses[0];
+    const rs30Fallback =
+      symbol === "BTC" || usd.percent_change_30d == null || btcUsd.percent_change_30d == null
+        ? null
+        : vsBtc(usd.percent_change_30d, btcUsd.percent_change_30d);
+
+    const origin = pairCloses.slice(-31)[0];
+    const window = pairCloses.slice(-31);
     const pairSeries: PairPoint[] =
-      pairCloses.length > 0 && origin
-        ? pairCloses.map((v, i) => ({
-            t: i,
-            v: (v / origin) * 100,
-          }))
+      window.length > 0 && origin
+        ? window.map((v, i) => ({ t: i, v: (v / origin) * 100 }))
         : [];
 
-    const draft: Draft = {
+    const circulating = t.circulating_supply ?? t.total_supply ?? null;
+    const maxSupply = t.max_supply && t.max_supply > 0 ? t.max_supply : null;
+    const mcFdv = mcFdvRatio(circulating, maxSupply, usd.price, usd.market_cap || 0);
+    const meta = lookupMeta(symbol);
+    const listedOnBinance = pairCloses.length >= 8 || usdCloses.length >= 8;
+
+    const draft: CoinDraft = {
       id: t.id,
       symbol,
       name: t.name,
@@ -227,20 +285,34 @@ export async function runAnalysis(): Promise<AnalysisResult> {
       pct12h: usd.percent_change_12h || 0,
       pct24h: usd.percent_change_24h || 0,
       pct7d: usd.percent_change_7d || 0,
+      pct30d: usd.percent_change_30d ?? null,
       rs24h,
       rs7d,
       rs14d: null,
-      rs30d: null,
+      rs30d: rs30Fallback,
       rsi14: null,
       volatility30d: null,
       maxDrawdown30d: null,
       distFrom30dHighPct: null,
       aboveSma: null,
-      hasBtcPair: symbol === "BTC" ? true : btcBases.has(base),
+      aboveEma200: null,
+      weeklyStructure: null,
+      obvRising: null,
+      hasBtcPair: listedOnBinance || symbol === "BTC" || symbol === "ETH",
       hasKlines: pairCloses.length >= 8,
+      klineDays: Math.max(pairCloses.length, usdCloses.length),
       pairSeries,
       turnover: usd.market_cap ? usd.volume_24h / usd.market_cap : 0,
+      circulatingSupply: circulating,
+      maxSupply,
+      mcFdv,
+      narrativeTags: meta.tags,
+      narrativeTagsFa: meta.tagsFa,
+      accrual: meta.accrual,
+      accrualNote: meta.note,
       pairCloses,
+      usdCloses,
+      usdVolumes,
     };
     const enriched = enrichFromKlines(draft);
     if (symbol === "BTC") {
@@ -249,38 +321,63 @@ export async function runAnalysis(): Promise<AnalysisResult> {
     return enriched;
   });
 
-  const { regime, note: regimeNote } = detectRegime(
+  const klinesOk = drafts.filter((d) => d.hasKlines).length;
+  const { regime, medianRs7, note: regimeNote } = detectRegime(
     drafts,
     global.bitcoin_dominance_percentage,
   );
+  const dom = dominanceBiasOf(
+    global.bitcoin_dominance_percentage,
+    btcPct7d,
+    medianRs7,
+  );
   const scored = scoreUniverse(drafts, regime).sort((a, b) => b.score - a.score);
   const { pick, runnerUp } = pickWinner(scored, regime);
-  const conf = confidenceOf(pick, runnerUp, pick.hasKlines);
+  const conf = confidenceOf(pick, runnerUp, pick.hasKlines, klinesOk, drafts.length);
   const { reasons, caution } = explainPick(
     pick,
     runnerUp,
     regime,
     regimeNote,
     btcPct7d,
+    { klinesOk, klinesTried: drafts.length, dominanceNote: dom.note },
   );
+  if (!btcParsed) {
+    caution.unshift(
+      "کندل بایننس در این لحظه در دسترس نبود؛ امتیاز با دادهٔ زنده پاپریکا (بازده کوتاه‌مدت و MC/FDV) ساخته شد.",
+    );
+  }
+  const checklist = buildChecklist(pick, {
+    regime,
+    btcDominance: global.bitcoin_dominance_percentage,
+    dominanceBias: dom.bias,
+  });
+  const portfolio = buildPortfolio(scored, regime);
 
   const result: AnalysisResult = {
     generatedAt: new Date().toISOString(),
-    sources: ["CoinPaprika", "Binance"],
+    sources: btcParsed ? ["CoinPaprika", "Binance"] : ["CoinPaprika"],
     btcDominance: global.bitcoin_dominance_percentage,
     btcPriceUsd: btcUsd.price,
     btcPct7d,
+    btcPct30d,
     regime,
     regimeNote,
+    dominanceBias: dom.bias,
+    dominanceNote: dom.note,
     universeSize: scored.length,
     scannedCount: ranked.length,
+    klinesOk,
+    klinesTried,
     pick,
     runnerUp,
-    top: scored.slice(0, 12),
+    top: scored.slice(0, 16),
     reasons,
-    caution,
+    caution: caution.slice(0, 5),
     confidence: conf.confidence,
     confidenceNote: conf.note,
+    checklist,
+    portfolio,
   };
 
   cache = { at: now, value: result };
