@@ -135,6 +135,16 @@ export function weeklyFromDaily(closes: number[]): number[] {
   return out;
 }
 
+export function weeklySupportBroken(closes: number[]): boolean {
+  const w = weeklyFromDaily(closes);
+  if (w.length < 8) return false;
+  const last = w[w.length - 1];
+  if (last == null) return false;
+  const prior = w.slice(-9, -1);
+  if (prior.length < 4) return false;
+  return last < Math.min(...prior);
+}
+
 export function detectWeeklyStructure(
   closes: number[],
 ): "bull" | "bear" | "range" {

@@ -30,6 +30,27 @@ export type Accrual =
 
 export type WeeklyStructure = "bull" | "bear" | "range";
 
+export type KillSwitchStatus = "NORMAL" | "HIGH_RISK" | "SUSPENDED";
+
+export type BuySignal = "open" | "reduced" | "suspended";
+
+export type BtcKillSwitch = {
+  status: KillSwitchStatus;
+  active: boolean;
+  aboveEma200: boolean | null;
+  ema200: number | null;
+  priceUsd: number;
+  distanceToEma: number | null;
+  weeklyStructure: WeeklyStructure | null;
+  weeklyMomentum: number | null;
+  severeWeekly: boolean;
+  weeklySupportBroken: boolean;
+  sizeMultiplier: number;
+  spotBuys: BuySignal;
+  headline: string;
+  note: string;
+};
+
 export type CoinRow = {
   id: string;
   symbol: string;
@@ -72,6 +93,16 @@ export type CoinRow = {
   narrativeTagsFa: string[];
   accrual: Accrual;
   accrualNote: string;
+  pairWeekly: WeeklyStructure | null;
+  pairSupportBroken: boolean;
+  unlockPenalty: number;
+  highDilution: boolean;
+  unlockPct30d: number | null;
+  unlockDate: string | null;
+  unlockDays: number | null;
+  unlockCliff: boolean;
+  buySignal: BuySignal;
+  sizeMultiplier: number;
   score: number;
   factors: FactorScore[];
 };
@@ -120,6 +151,10 @@ export type AnalysisResult = {
   scannedCount: number;
   klinesOk: number;
   klinesTried: number;
+  killSwitch: BtcKillSwitch;
+  spotBuys: BuySignal;
+  unlockSource: "coinmarketcap" | "unavailable";
+  unlockMatched: number;
   pick: CoinRow;
   runnerUp: CoinRow | null;
   top: CoinRow[];
@@ -131,8 +166,77 @@ export type AnalysisResult = {
   portfolio: Sleeve[];
 };
 
-export type CoinDraft = Omit<CoinRow, "score" | "factors"> & {
+export type CoinDraft = Omit<
+  CoinRow,
+  | "score"
+  | "factors"
+  | "unlockPenalty"
+  | "highDilution"
+  | "unlockPct30d"
+  | "unlockDate"
+  | "unlockDays"
+  | "unlockCliff"
+  | "buySignal"
+  | "sizeMultiplier"
+> & {
   pairCloses: number[];
   usdCloses: number[];
   usdVolumes: number[];
+};
+
+export type RawUnlockEvent = {
+  time: string;
+  amount: number;
+  allocationName: string;
+};
+
+export type UnlockAssessment = {
+  penalty: number;
+  highDilution: boolean;
+  pct30d: number | null;
+  nextDate: string | null;
+  nextDays: number | null;
+  cliff: boolean;
+  note: string;
+};
+
+export type DeskAction = "HOLD" | "SELL" | "REBALANCE";
+
+export type HoldingInput = {
+  symbol: string;
+  entryUsd: number;
+  sizeUsd: number;
+};
+
+export type PositionAdvice = {
+  symbol: string;
+  name: string;
+  score: number | null;
+  priceUsd: number | null;
+  pnlPct: number | null;
+  action: DeskAction;
+  reason: string;
+  targetSymbol: string | null;
+  targetName: string | null;
+  suggestedSizeUsd: number;
+  pairSupportBroken: boolean;
+  pairWeekly: WeeklyStructure | null;
+  highDilution: boolean;
+};
+
+export type RebalanceDestination = {
+  symbol: string;
+  name: string;
+  score: number;
+  usd: number;
+  reason: string;
+};
+
+export type RebalancePlan = {
+  rows: PositionAdvice[];
+  destinations: RebalanceDestination[];
+  rotateUsd: number;
+  holdUsd: number;
+  sellUsd: number;
+  note: string;
 };

@@ -1,4 +1,4 @@
-import type { CoinRow, Regime, Sleeve, SleeveLeg } from "./types.ts";
+import type { BtcKillSwitch, CoinRow, Regime, Sleeve, SleeveLeg } from "./types.ts";
 
 function splitByScore(rows: CoinRow[], totalWeight: number, maxN: number): SleeveLeg[] {
   const picks = rows.slice(0, maxN);
@@ -20,7 +20,11 @@ function splitByScore(rows: CoinRow[], totalWeight: number, maxN: number): Sleev
   }));
 }
 
-export function buildPortfolio(ranked: CoinRow[], regime: Regime): Sleeve[] {
+export function buildPortfolio(
+  ranked: CoinRow[],
+  regime: Regime,
+  kill?: BtcKillSwitch,
+): Sleeve[] {
   const btc = ranked.find((r) => r.symbol === "BTC");
   const eth = ranked.find((r) => r.symbol === "ETH");
 
@@ -68,7 +72,7 @@ export function buildPortfolio(ranked: CoinRow[], regime: Regime): Sleeve[] {
         ? "چرخش آلت: ETH داخل هسته وزن بیشتری می‌گیرد."
         : "بازار خنثی: هسته بین BTC و ETH تقسیم می‌شود.";
 
-  return [
+  const sleeves: Sleeve[] = [
     {
       key: "core",
       title: "هسته · بیت‌کوین و اتریوم",
@@ -91,6 +95,67 @@ export function buildPortfolio(ranked: CoinRow[], regime: Regime): Sleeve[] {
       legs: midLegs,
     },
   ];
+
+  if (!kill || kill.status === "NORMAL") return sleeves;
+
+  if (kill.status === "SUSPENDED") {
+    const btcLeg = btc
+      ? [
+          {
+            symbol: btc.symbol,
+            name: btc.name,
+            rank: btc.rank,
+            weight: 1,
+            score: btc.score,
+            reason: "کلید قطع فعال است؛ تنها وزن باز، پناهگاه بیت‌کوین است.",
+          },
+        ]
+      : [];
+    return [
+      {
+        key: "core",
+        title: "پناهگاه · بیت‌کوین",
+        targetPct: 100,
+        note: "خرید اسپات آلت معلق شد. وزن پیشنهادی کامل به BTC برگشت.",
+        legs: btcLeg,
+      },
+      {
+        key: "large",
+        title: "لارج‌کپ · معلق",
+        targetPct: 0,
+        note: "سیگنال خرید تا رفع کلید قطع صادر نمی‌شود.",
+        legs: [],
+      },
+      {
+        key: "mid",
+        title: "میدکپ · معلق",
+        targetPct: 0,
+        note: "سیگنال خرید تا رفع کلید قطع صادر نمی‌شود.",
+        legs: [],
+      },
+    ];
+  }
+
+  let freed = 0;
+  const scaled = sleeves.map((sleeve) => ({
+    ...sleeve,
+    note: `${sleeve.note} حجم آلت‌ها به‌خاطر ریسک کلان نصف شد.`,
+    legs: sleeve.legs.map((leg) => {
+      if (leg.symbol === "BTC") return leg;
+      freed += leg.weight * 0.5;
+      return {
+        ...leg,
+        weight: leg.weight * 0.5,
+        reason: `${leg.reason} · حجم ۵۰٪`,
+      };
+    }),
+  }));
+  return scaled.map((sleeve) => ({
+    ...sleeve,
+    legs: sleeve.legs.map((leg) =>
+      leg.symbol === "BTC" ? { ...leg, weight: leg.weight + freed } : leg,
+    ),
+  }));
 }
 
 export function sleeveTotal(sleeves: Sleeve[]): number {

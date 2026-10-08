@@ -60,6 +60,7 @@
   --color-down: #c45c5c;
   --color-down-dim: rgb(196 92 92 / 0.14);
   --color-warn: #b08948;
+  --color-warn-dim: rgb(176 137 72 / 0.16);
 
   --radius-xs: 4px;
   --radius-sm: 8px;

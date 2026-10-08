@@ -1,9 +1,12 @@
 import type {
+  BuySignal,
+  BtcKillSwitch,
   CoinDraft,
   CoinRow,
   FactorKey,
   FactorScore,
   Regime,
+  UnlockAssessment,
 } from "./types.ts";
 import { isHot, lookupMeta } from "./catalog.ts";
 import {
@@ -20,7 +23,9 @@ import {
   dailyReturns,
   tanhScore,
   obvIsRising,
+  weeklySupportBroken,
 } from "./math.ts";
+import { emptyUnlock } from "./unlocks.ts";
 
 export const FACTOR_WEIGHTS: Record<FactorKey, number> = {
   rs: 0.22,
@@ -152,6 +157,9 @@ export function enrichFromKlines(draft: CoinDraft): CoinDraft {
   const weeklyStructure = usd.length >= 56 ? detectWeeklyStructure(usd) : null;
   const obvRising = usd.length >= 15 && vols.length >= 15 ? obvIsRising(usd, vols) : null;
 
+  const pairWeekly = closes.length >= 56 ? detectWeeklyStructure(closes) : null;
+  const supportBroken = weeklySupportBroken(closes);
+
   const window = closes.slice(-31);
   const first = window[0] ?? 1;
   const pairSeries = window.map((v, i) => ({
@@ -174,6 +182,8 @@ export function enrichFromKlines(draft: CoinDraft): CoinDraft {
     aboveEma200,
     weeklyStructure,
     obvRising,
+    pairWeekly,
+    pairSupportBroken: supportBroken,
     pairSeries,
   };
 }
@@ -229,7 +239,14 @@ function pct(x: number): string {
   return `${sign}${v.toFixed(1)}٪`;
 }
 
-export function scoreUniverse(drafts: CoinDraft[], regime: Regime): CoinRow[] {
+export function scoreUniverse(
+  drafts: CoinDraft[],
+  regime: Regime,
+  ctx?: {
+    unlocks?: Map<string, UnlockAssessment>;
+    kill?: BtcKillSwitch;
+  },
+): CoinRow[] {
   const rsBlend = drafts.map((d) => blendRs(d));
   const sharpe = drafts.map((d) => sharpeLike(d));
   const vols = drafts.map((d) => d.volume24h);
@@ -248,6 +265,15 @@ export function scoreUniverse(drafts: CoinDraft[], regime: Regime): CoinRow[] {
 
     let score = factors.reduce((s, f) => s + f.score * f.weight, 0);
 
+    const unlock = ctx?.unlocks?.get(d.symbol) ?? emptyUnlock();
+    if (d.symbol !== "BTC" && unlock.penalty > 0) {
+      score -= unlock.penalty;
+      const tok = factors.find((f) => f.key === "tokenomics");
+      if (tok) {
+        tok.note += ` جریمه کلیف/رقیق‌سازی: ${unlock.penalty} امتیاز از نمره کل کسر شد. ${unlock.note}`;
+      }
+    }
+
     if (d.symbol === "BTC") {
       if (regime === "btc") score += 6;
       if (regime === "alt") score -= 4;
@@ -262,9 +288,28 @@ export function scoreUniverse(drafts: CoinDraft[], regime: Regime): CoinRow[] {
     }
     if (d.aboveEma200 === false && d.weeklyStructure === "bear") score -= 4;
 
+    const kill = ctx?.kill;
+    let buySignal: BuySignal = "open";
+    let sizeMultiplier = 1;
+    if (d.symbol !== "BTC" && kill && kill.status === "SUSPENDED") {
+      buySignal = "suspended";
+      sizeMultiplier = 0;
+    } else if (d.symbol !== "BTC" && kill && kill.status === "HIGH_RISK") {
+      buySignal = "reduced";
+      sizeMultiplier = 0.5;
+    }
+
     const { pairCloses: _p, usdCloses: _u, usdVolumes: _v, ...rest } = d;
     return {
       ...rest,
+      unlockPenalty: d.symbol === "BTC" ? 0 : unlock.penalty,
+      highDilution: d.symbol === "BTC" ? false : unlock.highDilution,
+      unlockPct30d: d.symbol === "BTC" ? null : unlock.pct30d,
+      unlockDate: d.symbol === "BTC" ? null : unlock.nextDate,
+      unlockDays: d.symbol === "BTC" ? null : unlock.nextDays,
+      unlockCliff: d.symbol === "BTC" ? false : unlock.cliff,
+      buySignal,
+      sizeMultiplier,
       score: clamp(score),
       factors,
     };
@@ -538,8 +583,10 @@ function scoreNarrative(d: CoinDraft): FactorScore {
 export function pickWinner(
   ranked: CoinRow[],
   regime: Regime,
+  kill?: BtcKillSwitch,
 ): { pick: CoinRow; runnerUp: CoinRow | null } {
   const eligible = ranked.filter((r) => {
+    if (r.buySignal === "suspended") return false;
     if (r.volume24h < 8_000_000) return false;
     if (r.rank > 100) return false;
     if (
@@ -577,6 +624,21 @@ export function pickWinner(
       (r) => r.symbol !== pick!.symbol && (r.rsi14 == null || r.rsi14 < 72),
     );
     if (alt && pick.score - alt.score < 8) pick = alt;
+  }
+
+  if (pick?.highDilution) {
+    const cleaner = sorted.find(
+      (r) => r.symbol !== pick!.symbol && !r.highDilution && pick!.score - r.score < 8,
+    );
+    if (cleaner) pick = cleaner;
+  }
+
+  if (kill?.status === "SUSPENDED") {
+    const btc = ranked.find((r) => r.symbol === "BTC");
+    if (btc) {
+      const runnerUp = sorted.find((r) => r.symbol !== "BTC") ?? null;
+      return { pick: btc, runnerUp };
+    }
   }
 
   const runnerUp =

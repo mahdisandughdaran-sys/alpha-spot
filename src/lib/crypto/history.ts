@@ -1,4 +1,4 @@
-import type { AnalysisResult, Regime } from "./types.ts";
+import type { AnalysisResult, KillSwitchStatus, Regime } from "./types.ts";
 
 const KEY = "alpha-spot-history-v2";
 const WATCH_KEY = "alpha-spot-watch-v1";
@@ -13,6 +13,7 @@ export type RunSummary = {
   dominance: number;
   rs7d: number;
   runnerUp: string | null;
+  killStatus?: KillSwitchStatus;
 };
 
 function canStore(): boolean {
@@ -42,6 +43,7 @@ export function saveRun(result: AnalysisResult): RunSummary[] {
     dominance: result.btcDominance,
     rs7d: result.pick.rs7d,
     runnerUp: result.runnerUp?.symbol ?? null,
+    killStatus: result.killSwitch.status,
   };
   const prev = loadHistory().filter((r) => r.at !== row.at);
   const next = [row, ...prev].slice(0, MAX);

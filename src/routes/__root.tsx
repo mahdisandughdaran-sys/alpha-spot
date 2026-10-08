@@ -14,7 +14,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "تحلیل صد ارز برتر برای خرید اسپات با جفت بیت‌کوین، نسبت MC/FDV، روند هفتگی و مدیریت پرتفوی.",
+          "تحلیل صد ارز برتر با کلید قطع بیت‌کوین، جریمه آنلاک و پایش چرخش سبد اسپات.",
       },
       { name: "theme-color", content: "#09090B" },
     ],

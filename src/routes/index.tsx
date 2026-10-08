@@ -4,10 +4,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { Activity, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HistoryPanel } from "@/components/desk/history-panel";
+import { KillSwitchBanner } from "@/components/desk/kill-switch-banner";
 import { Leaderboard } from "@/components/desk/leaderboard";
 import { Methodology } from "@/components/desk/methodology";
+import { MonitorPanel } from "@/components/desk/monitor-panel";
 import { PickPanel } from "@/components/desk/pick-panel";
 import { PortfolioPanel } from "@/components/desk/portfolio-panel";
+import { UnlocksPanel } from "@/components/desk/unlocks-panel";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
 import {
   loadHistory,
@@ -22,12 +25,12 @@ export const Route = createFileRoute("/")({ component: Home });
 
 const STAGES = [
   "گرفتن رتبه، عرضه و حجم صد ارز برتر",
-  "ساخت جفت بیت‌کوین و کندل ۲۰۰ روزه",
-  "MC/FDV، EMA ۲۰۰، ساختار هفتگی و OBV",
-  "وزن‌دهی فاکتورها، چک‌لیست و پرتفوی",
+  "ساخت جفت بیت‌کوین، EMA ۲۰۰ و ساختار هفتگی",
+  "کلید قطع بیت‌کوین و تقویم آزادسازی ۳۰ روز",
+  "امتیاز، تعلیق سیگنال و پرتفوی",
 ];
 
-type Tab = "pick" | "table" | "portfolio" | "method" | "history";
+type Tab = "pick" | "table" | "unlocks" | "portfolio" | "monitor" | "method" | "history";
 
 function Home() {
   const run = useServerFn(runSpotAnalysis);
@@ -84,9 +87,9 @@ function Home() {
                 آلفا اسپات
               </h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
-                یک دکمه، صد ارز اول بازار. هر دارایی روی جفت بیت‌کوین، نسبت
-                MC/FDV، روند هفتگی و نقدشوندگی سنجیده می‌شود تا بهترین خرید اسپات
-                — یا خود بیت‌کوین — مشخص شود.
+                صد ارز اول روی جفت بیت‌کوین، نسبت MC/FDV و سه لایه ریسک سازمانی
+                سنجیده می‌شوند: کلید قطع بیت‌کوین، جریمه کلیف آنلاک، و قوانین خروج
+                و چرخش سبد.
               </p>
             </div>
             <Button
@@ -136,12 +139,15 @@ function Home() {
 
         {status === "done" && result ? (
           <>
+            <KillSwitchBanner kill={result.killSwitch} />
             <nav className="flex gap-1 overflow-x-auto rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
               {(
                 [
                   ["pick", "انتخاب"],
                   ["table", "رتبه‌ها"],
+                  ["unlocks", "آنلاک"],
                   ["portfolio", "پرتفوی"],
+                  ["monitor", "پایش سبد"],
                   ["method", "روش"],
                   ["history", "سابقه"],
                 ] as const
@@ -169,9 +175,17 @@ function Home() {
                 onToggleWatch={(symbol) => setWatched(toggleWatch(symbol))}
               />
             ) : null}
+            {tab === "unlocks" ? (
+              <UnlocksPanel
+                rows={result.top}
+                source={result.unlockSource}
+                matched={result.unlockMatched}
+              />
+            ) : null}
             {tab === "portfolio" ? (
               <PortfolioPanel sleeves={result.portfolio} />
             ) : null}
+            {tab === "monitor" ? <MonitorPanel result={result} /> : null}
             {tab === "method" ? <Methodology /> : null}
             {tab === "history" ? <HistoryPanel runs={history} /> : null}
           </>
@@ -207,8 +221,8 @@ function IdleState() {
         />
         <IdleCard
           k="۰۴"
-          t="هسته پرتفوی"
-          d="۵۵٪ بیت‌کوین و اتریوم، ۳۰٪ لارج‌کپ، ۱۵٪ میدکپ. اگر آلت‌ها ضعیف باشند خود بیت برنده است."
+          t="سه لایه ریسک"
+          d="کلید قطع BTC، جریمه آنلاک بالای ۳٪ عرضه، و پایش خروج اگر ALT/BTC بشکند یا امتیاز زیر ۶۰ بیاید."
         />
       </ul>
       <Methodology />

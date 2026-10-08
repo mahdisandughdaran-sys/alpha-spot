@@ -1,5 +1,6 @@
 import type {
   AnalysisResult,
+  BtcKillSwitch,
   CheckItem,
   CoinRow,
   DominanceBias,
@@ -12,6 +13,7 @@ export function buildChecklist(
     regime: Regime;
     btcDominance: number;
     dominanceBias: DominanceBias;
+    kill?: BtcKillSwitch;
   },
 ): CheckItem[] {
   const mcOk =
@@ -86,6 +88,25 @@ export function buildChecklist(
           : emaOk === false
             ? "زیر EMA ۲۰۰ — روند دلاری هنوز فرسایشی است."
             : "کندل ۲۰۰ روزه کامل نبود.",
+    },
+    {
+      key: "unlock",
+      label: "آزادسازی ۳۰ روز",
+      desired: "کمتر از ۳٪ عرضه کل",
+      ok: pick.symbol === "BTC" ? true : pick.unlockPct30d == null ? null : !pick.highDilution,
+      detail:
+        pick.unlockPct30d == null
+          ? "تقویم آزادسازی برای این نماد نبود."
+          : pick.highDilution
+            ? `${pick.unlockPct30d.toFixed(2)}٪ عرضه در ۳۰ روز · جریمه ${pick.unlockPenalty} امتیاز · High Dilution Risk`
+            : `${pick.unlockPct30d.toFixed(2)}٪ عرضه در ۳۰ روز · بدون جریمه`,
+    },
+    {
+      key: "kill",
+      label: "کلید قطع بیت‌کوین",
+      desired: "بالای EMA ۲۰۰ و هفتگی غیرنزولی شدید",
+      ok: ctx.kill ? ctx.kill.status === "NORMAL" : null,
+      detail: ctx.kill?.note ?? "فیلتر کلان هنوز محاسبه نشده است.",
     },
   ];
 }

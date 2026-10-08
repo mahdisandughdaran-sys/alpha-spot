@@ -7,10 +7,12 @@ import {
   pickWinner,
   scoreUniverse,
 } from "./scoring.ts";
-import { dominanceBiasOf, buildChecklist } from "./checklist.ts";
+import { buildChecklist, dominanceBiasOf } from "./checklist.ts";
 import { buildPortfolio } from "./portfolio.ts";
 import { confidenceOf, explainPick } from "./explain.ts";
-import type { AnalysisResult, CoinDraft, PairPoint } from "./types.ts";
+import { evaluateKillSwitch } from "./kill-switch.ts";
+import { loadUnlockAssessments } from "./unlocks.server.ts";
+import type { AnalysisResult, CoinDraft, PairPoint, UnlockAssessment } from "./types.ts";
 
 const PAPRIKA = "https://api.coinpaprika.com/v1";
 const BINANCE = "https://data-api.binance.vision/api/v3";
@@ -310,6 +312,8 @@ export async function runAnalysis(): Promise<AnalysisResult> {
       narrativeTagsFa: meta.tagsFa,
       accrual: meta.accrual,
       accrualNote: meta.note,
+      pairWeekly: null,
+      pairSupportBroken: false,
       pairCloses,
       usdCloses,
       usdVolumes,
@@ -322,6 +326,22 @@ export async function runAnalysis(): Promise<AnalysisResult> {
   });
 
   const klinesOk = drafts.filter((d) => d.hasKlines).length;
+  const btcDraft = drafts.find((d) => d.symbol === "BTC");
+  const killSwitch = evaluateKillSwitch({
+    priceUsd: btcUsd.price,
+    closes: btcDraft?.usdCloses ?? [],
+  });
+  let unlockSource: AnalysisResult["unlockSource"] = "unavailable";
+  let unlockMatched = 0;
+  let unlocks = new Map<string, UnlockAssessment>();
+  try {
+    const loaded = await loadUnlockAssessments(drafts.map((d) => d.symbol));
+    unlockSource = loaded.source;
+    unlocks = loaded.bySymbol;
+    unlockMatched = [...unlocks.values()].filter((u) => u.pct30d != null).length;
+  } catch {
+    unlockSource = "unavailable";
+  }
   const { regime, medianRs7, note: regimeNote } = detectRegime(
     drafts,
     global.bitcoin_dominance_percentage,
@@ -331,8 +351,10 @@ export async function runAnalysis(): Promise<AnalysisResult> {
     btcPct7d,
     medianRs7,
   );
-  const scored = scoreUniverse(drafts, regime).sort((a, b) => b.score - a.score);
-  const { pick, runnerUp } = pickWinner(scored, regime);
+  const scored = scoreUniverse(drafts, regime, { unlocks, kill: killSwitch }).sort(
+    (a, b) => b.score - a.score,
+  );
+  const { pick, runnerUp } = pickWinner(scored, regime, killSwitch);
   const conf = confidenceOf(pick, runnerUp, pick.hasKlines, klinesOk, drafts.length);
   const { reasons, caution } = explainPick(
     pick,
@@ -347,16 +369,34 @@ export async function runAnalysis(): Promise<AnalysisResult> {
       "کندل بایننس در این لحظه در دسترس نبود؛ امتیاز با دادهٔ زنده پاپریکا (بازده کوتاه‌مدت و MC/FDV) ساخته شد.",
     );
   }
+  if (killSwitch.active) {
+    caution.unshift(killSwitch.note);
+  }
+  if (pick.highDilution) {
+    caution.unshift(
+      `${pick.symbol} برچسب High Dilution Risk دارد و ${pick.unlockPenalty} امتیاز از نمره کل کم شده است.`,
+    );
+  }
+  if (unlockSource === "unavailable") {
+    caution.push(
+      "تقویم آزادسازی الان در دسترس نبود؛ جریمه کلیف اعمال نشد. تحلیل قیمتی همچنان معتبر است.",
+    );
+  }
   const checklist = buildChecklist(pick, {
     regime,
     btcDominance: global.bitcoin_dominance_percentage,
     dominanceBias: dom.bias,
+    kill: killSwitch,
   });
-  const portfolio = buildPortfolio(scored, regime);
+  const portfolio = buildPortfolio(scored, regime, killSwitch);
 
   const result: AnalysisResult = {
     generatedAt: new Date().toISOString(),
-    sources: btcParsed ? ["CoinPaprika", "Binance"] : ["CoinPaprika"],
+    sources: [
+      "CoinPaprika",
+      ...(btcParsed ? ["Binance"] : []),
+      ...(unlockSource === "coinmarketcap" ? ["CMC Unlocks"] : []),
+    ],
     btcDominance: global.bitcoin_dominance_percentage,
     btcPriceUsd: btcUsd.price,
     btcPct7d,
@@ -369,9 +409,13 @@ export async function runAnalysis(): Promise<AnalysisResult> {
     scannedCount: ranked.length,
     klinesOk,
     klinesTried,
+    killSwitch,
+    spotBuys: killSwitch.spotBuys,
+    unlockSource,
+    unlockMatched,
     pick,
     runnerUp,
-    top: scored.slice(0, 16),
+    top: scored,
     reasons,
     caution: caution.slice(0, 5),
     confidence: conf.confidence,

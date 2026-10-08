@@ -8,7 +8,8 @@ export function PortfolioPanel({ sleeves }: { sleeves: Sleeve[] }) {
         <h3 className="text-base font-medium text-fg">پرتفوی پیشنهادی اسپات</h3>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
           حتی با بهترین تحلیل، تمرکز کل سرمایه روی یک آلت‌کوین ریسک بالایی دارد.
-          مدل پیشنهادی: ۵۵٪ هسته BTC/ETH، ۳۰٪ لارج‌کپ، ۱۵٪ میدکپ.
+          مدل پایه ۵۵٪ هسته، ۳۰٪ لارج‌کپ و ۱۵٪ میدکپ است. اگر کلید قطع فعال باشد
+          وزن آلت صفر می‌شود؛ در ریسک بالا حجم آلت‌ها نصف و مابه‌التفاوت به بیت‌کوین می‌رود.
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">

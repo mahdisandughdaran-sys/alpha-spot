@@ -54,7 +54,13 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
       </div>
 
       <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-7">
-        <p className="text-xs tracking-wide text-subtle">بهترین خرید اسپات الان</p>
+                <p className="text-xs tracking-wide text-subtle">
+                  {result.spotBuys === "suspended"
+                    ? "خرید اسپات معلق است · پناهگاه"
+                    : result.spotBuys === "reduced"
+                      ? "بهترین خرید با نصف حجم"
+                      : "بهترین خرید اسپات الان"}
+                </p>
         <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="flex items-center gap-3">

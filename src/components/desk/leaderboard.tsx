@@ -20,13 +20,13 @@ export function Leaderboard({
         <div>
           <h3 className="text-base font-medium text-fg">رتبه‌بندی مدل</h3>
           <p className="mt-1 text-xs text-subtle">
-            امتیاز نهایی وزن هفت‌فاکتوری است. ستون BTC یعنی بازده ۷ روزه روی جفت بیت‌کوین.
-            ستاره، واچ‌لیست همین مرورگر است.
+            امتیاز نهایی بعد از جریمه آنلاک است. سیگنال خرید با کلید قطع بیت‌کوین
+            ممکن است معلق یا نصف‌حجم شود.
           </p>
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[920px] text-sm">
           <thead>
             <tr className="border-t border-border text-xs text-subtle">
               <th className="px-3 py-2 text-start font-medium" />
@@ -35,6 +35,8 @@ export function Leaderboard({
               <th className="px-4 py-2 text-start font-medium">امتیاز</th>
               <th className="px-4 py-2 text-start font-medium">۷ر vs BTC</th>
               <th className="px-4 py-2 text-start font-medium">MC/FDV</th>
+              <th className="px-4 py-2 text-start font-medium">آنلاک ۳۰ر</th>
+              <th className="px-4 py-2 text-start font-medium">سیگنال</th>
               <th className="px-4 py-2 text-start font-medium">EMA۲۰۰</th>
               <th className="px-4 py-2 text-start font-medium">RSI</th>
               <th className="px-4 py-2 text-start font-medium">قیمت BTC</th>
@@ -82,6 +84,25 @@ export function Leaderboard({
                   <td className={`num px-4 py-3 ${rsTone}`}>{formatPct(row.rs7d)}</td>
                   <td className="num px-4 py-3 text-muted">
                     {row.mcFdv == null ? "—" : `${(row.mcFdv * 100).toFixed(0)}٪`}
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.highDilution ? (
+                      <span className="text-xs text-down">
+                        High Dilution
+                        <span className="num ms-1">-{row.unlockPenalty}</span>
+                      </span>
+                    ) : (
+                      <span className="num text-xs text-muted">
+                        {row.unlockPct30d == null ? "—" : `${row.unlockPct30d.toFixed(1)}٪`}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted">
+                    {row.buySignal === "suspended"
+                      ? "معلق"
+                      : row.buySignal === "reduced"
+                        ? "حجم ۵۰٪"
+                        : "باز"}
                   </td>
                   <td className="px-4 py-3 text-muted">
                     {row.aboveEma200 === true

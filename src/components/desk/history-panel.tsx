@@ -32,6 +32,7 @@ export function HistoryPanel({ runs }: { runs: RunSummary[] }) {
               <th className="px-4 py-2 text-start font-medium">رژیم</th>
               <th className="px-4 py-2 text-start font-medium">دامیننس</th>
               <th className="px-4 py-2 text-start font-medium">۷ر vs BTC</th>
+              <th className="px-4 py-2 text-start font-medium">کلید قطع</th>
               <th className="px-4 py-2 text-start font-medium">دوم</th>
             </tr>
           </thead>
@@ -64,6 +65,15 @@ export function HistoryPanel({ runs }: { runs: RunSummary[] }) {
                   {run.dominance.toFixed(1)}٪
                 </td>
                 <td className="num px-4 py-3 text-muted">{formatPct(run.rs7d)}</td>
+                <td className="px-4 py-3 text-muted">
+                  {run.killStatus === "SUSPENDED"
+                    ? "معلق"
+                    : run.killStatus === "HIGH_RISK"
+                      ? "حجم نصف"
+                      : run.killStatus === "NORMAL"
+                        ? "نرمال"
+                        : "—"}
+                </td>
                 <td className="num px-4 py-3 text-subtle">{run.runnerUp ?? "—"}</td>
               </tr>
             ))}
