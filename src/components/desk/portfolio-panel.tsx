@@ -1,7 +1,9 @@
-import type { Sleeve } from "@/lib/crypto/types";
+import type { AnalysisResult } from "@/lib/crypto/types";
+import { SignalButton } from "./signal-button";
 import { formatScore } from "./format";
 
-export function PortfolioPanel({ sleeves }: { sleeves: Sleeve[] }) {
+export function PortfolioPanel({ result }: { result: AnalysisResult }) {
+  const sleeves = result.portfolio;
   return (
     <section className="flex flex-col gap-4">
       <div>
@@ -47,6 +49,7 @@ export function PortfolioPanel({ sleeves }: { sleeves: Sleeve[] }) {
           </article>
         ))}
       </div>
+      <SignalButton result={result} />
     </section>
   );
 }

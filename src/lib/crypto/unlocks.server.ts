@@ -1,4 +1,5 @@
 import { assessUnlocks, emptyUnlock } from "./unlocks.ts";
+import { readCache, writeCache } from "./cache.server.ts";
 import type { UnlockAssessment } from "./types.ts";
 
 const LISTING =
@@ -7,6 +8,9 @@ const HISTORY =
   "https://api.coinmarketcap.com/data-api/v3/token-unlock/historical";
 
 const CACHE_MS = 10 * 60 * 1000;
+const UNLOCK_KEY = "unlocks:bundle:v1";
+const UNLOCK_FRESH = 6 * 60 * 60;
+const UNLOCK_STALE = 3 * 24 * 60 * 60;
 
 type IndexRow = {
   cryptoId: number;
@@ -153,8 +157,19 @@ export async function loadUnlockAssessments(
     }
   }
 
+  const fresh = await readStoredUnlocks(UNLOCK_FRESH);
+  if (fresh && wanted.every((s) => fresh.has(s))) {
+    cache = { at: now, bySymbol: fresh };
+    return { source: "coinmarketcap", bySymbol: fresh };
+  }
+
   const index = await loadIndex();
   if (index.size === 0) {
+    const stale = await readStoredUnlocks(UNLOCK_STALE);
+    if (stale && [...stale.keys()].length > 0) {
+      cache = { at: now, bySymbol: stale };
+      return { source: "coinmarketcap", bySymbol: stale };
+    }
     return { source: "unavailable", bySymbol: new Map() };
   }
 
@@ -189,5 +204,21 @@ export async function loadUnlockAssessments(
   }
 
   cache = { at: now, bySymbol };
+  await writeCache(
+    UNLOCK_KEY,
+    JSON.stringify([...bySymbol.entries()]),
+  );
   return { source: "coinmarketcap", bySymbol };
+}
+
+async function readStoredUnlocks(maxAgeSec: number): Promise<Map<string, UnlockAssessment> | null> {
+  const raw = await readCache(UNLOCK_KEY, maxAgeSec);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as [string, UnlockAssessment][];
+    if (!Array.isArray(parsed)) return null;
+    return new Map(parsed);
+  } catch {
+    return null;
+  }
 }

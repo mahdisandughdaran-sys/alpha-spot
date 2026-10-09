@@ -11,7 +11,15 @@ import { MonitorPanel } from "@/components/desk/monitor-panel";
 import { PickPanel } from "@/components/desk/pick-panel";
 import { PortfolioPanel } from "@/components/desk/portfolio-panel";
 import { UnlocksPanel } from "@/components/desk/unlocks-panel";
+import { BacktestPanel } from "@/components/desk/backtest-panel";
+import { ExecutePanel } from "@/components/desk/execute-panel";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
+import {
+  hasSeen,
+  loadDeskSettings,
+  markSeen,
+  pushAlert,
+} from "@/lib/crypto/desk-client";
 import {
   loadHistory,
   loadWatch,
@@ -19,6 +27,7 @@ import {
   toggleWatch,
   type RunSummary,
 } from "@/lib/crypto/history";
+import { checkDeskPulse, dispatchDeskSignal } from "@/lib/crypto/ops";
 import type { AnalysisResult } from "@/lib/crypto/types";
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -26,14 +35,16 @@ export const Route = createFileRoute("/")({ component: Home });
 const STAGES = [
   "گرفتن رتبه، عرضه و حجم صد ارز برتر",
   "ساخت جفت بیت‌کوین، EMA ۲۰۰ و ساختار هفتگی",
-  "کلید قطع بیت‌کوین و تقویم آزادسازی ۳۰ روز",
+  "کلید قطع بیت‌کوین، آنلاک، دفتر سفارش و فاندینگ",
   "امتیاز، تعلیق سیگنال و پرتفوی",
 ];
 
-type Tab = "pick" | "table" | "unlocks" | "portfolio" | "monitor" | "method" | "history";
+type Tab = "pick" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "execute" | "method" | "history";
 
 function Home() {
   const run = useServerFn(runSpotAnalysis);
+  const pulse = useServerFn(checkDeskPulse);
+  const sendAlert = useServerFn(dispatchDeskSignal);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [stage, setStage] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -41,11 +52,110 @@ function Home() {
   const [tab, setTab] = useState<Tab>("pick");
   const [history, setHistory] = useState<RunSummary[]>([]);
   const [watched, setWatched] = useState<string[]>([]);
+  const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
     setHistory(loadHistory());
     setWatched(loadWatch());
   }, []);
+
+  useEffect(() => {
+    if (!result) return;
+    const settings = loadDeskSettings();
+    const day = new Date().toISOString().slice(0, 10);
+    const jobs: { id: string; title: string; text: string }[] = [];
+    if (settings.alertKill && result.killSwitch.status !== "NORMAL") {
+      jobs.push({
+        id: `kill:${result.killSwitch.status}:${day}`,
+        title: result.killSwitch.headline,
+        text: result.killSwitch.note,
+      });
+    }
+    if (settings.alertScore && result.pick.score < settings.scoreFloor) {
+      jobs.push({
+        id: `score:${result.pick.symbol}:${day}`,
+        title: `امتیاز ${result.pick.symbol} زیر ${settings.scoreFloor}`,
+        text: `امتیاز فعلی ${result.pick.score.toFixed(1)} است.`,
+      });
+    }
+    for (const symbol of watched) {
+      const row = result.top.find((item) => item.symbol === symbol);
+      if (row && row.score < settings.scoreFloor) {
+        jobs.push({
+          id: `watch:${symbol}:${day}`,
+          title: `${symbol} در دیده‌بان زیر آستانه است`,
+          text: `امتیاز ${row.score.toFixed(1)}.`,
+        });
+      }
+    }
+    let cancelled = false;
+    void (async () => {
+      for (const job of jobs) {
+        if (cancelled || hasSeen(job.id)) continue;
+        markSeen(job.id);
+        pushAlert({ id: job.id, at: new Date().toISOString(), title: job.title, text: job.text });
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification(job.title, { body: job.text });
+        }
+        if (settings.webhookUrl || settings.telegramToken) {
+          try {
+            await sendAlert({
+              data: {
+                title: job.title,
+                text: job.text,
+                kind: "alert",
+                orders: [],
+                webhookUrl: settings.webhookUrl,
+                telegramToken: settings.telegramToken,
+                telegramChat: settings.telegramChat,
+              },
+            });
+          } catch {
+            /* مقصد هشدار اختیاری است */
+          }
+        }
+        if (!cancelled) setFlash(job.title);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [result, sendAlert, watched]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void (async () => {
+        const settings = loadDeskSettings();
+        if (!settings.alertKill) return;
+        try {
+          const beat = await pulse();
+          if (beat.status === "NORMAL") return;
+          const day = new Date().toISOString().slice(0, 10);
+          const key = `pulse:${beat.status}:${day}`;
+          if (hasSeen(key)) return;
+          markSeen(key);
+          pushAlert({ id: key, at: beat.at, title: beat.headline, text: beat.note });
+          if (settings.webhookUrl || settings.telegramToken) {
+            await sendAlert({
+              data: {
+                title: beat.headline,
+                text: beat.note,
+                kind: "alert",
+                orders: [],
+                webhookUrl: settings.webhookUrl,
+                telegramToken: settings.telegramToken,
+                telegramChat: settings.telegramChat,
+              },
+            });
+          }
+          setFlash(beat.headline);
+        } catch {
+          /* پالس سبک است؛ خطای شبکه سکوت می‌ماند */
+        }
+      })();
+    }, 180_000);
+    return () => window.clearInterval(id);
+  }, [pulse, sendAlert]);
 
   async function onAnalyze() {
     setStatus("loading");
@@ -70,7 +180,9 @@ function Home() {
 
   const headerMeta = useMemo(() => {
     if (!result) return null;
-    return `${result.universeSize} ارز از صد تای اول — استیبل و رپد حذف شده · ${result.klinesOk} کندل کامل`;
+    return `${result.universeSize} ارز از صد تای اول — استیبل و رپد حذف شده · ${result.klinesOk} کندل کامل · ${
+      result.dataCache === "live" ? "داده زنده" : result.dataCache === "memory" ? "از حافظه" : "از کش ذخیره‌شده"
+    }`;
   }, [result]);
 
   return (
@@ -111,6 +223,7 @@ function Home() {
             </Button>
           </div>
           {headerMeta ? <p className="text-xs text-subtle">{headerMeta}</p> : null}
+          {flash ? <p className="text-sm text-warn">{flash}</p> : null}
         </header>
 
         {status === "idle" ? <IdleState /> : null}
@@ -148,6 +261,8 @@ function Home() {
                   ["unlocks", "آنلاک"],
                   ["portfolio", "پرتفوی"],
                   ["monitor", "پایش سبد"],
+                  ["backtest", "بک‌تست"],
+                  ["execute", "اجرا"],
                   ["method", "روش"],
                   ["history", "سابقه"],
                 ] as const
@@ -182,10 +297,10 @@ function Home() {
                 matched={result.unlockMatched}
               />
             ) : null}
-            {tab === "portfolio" ? (
-              <PortfolioPanel sleeves={result.portfolio} />
-            ) : null}
+            {tab === "portfolio" ? <PortfolioPanel result={result} /> : null}
             {tab === "monitor" ? <MonitorPanel result={result} /> : null}
+            {tab === "backtest" ? <BacktestPanel /> : null}
+            {tab === "execute" ? <ExecutePanel result={result} /> : null}
             {tab === "method" ? <Methodology /> : null}
             {tab === "history" ? <HistoryPanel runs={history} /> : null}
           </>

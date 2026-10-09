@@ -161,6 +161,11 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
         <p className="mt-5 max-w-3xl text-sm leading-relaxed text-muted">
           {result.confidenceNote}
         </p>
+        {result.books.find((book) => book.symbol === pick.symbol) ? (
+          <p className="mt-3 max-w-3xl text-xs leading-relaxed text-subtle">
+            {result.books.find((book) => book.symbol === pick.symbol)?.note}
+          </p>
+        ) : null}
       </section>
 
       <ChecklistCard items={result.checklist} />

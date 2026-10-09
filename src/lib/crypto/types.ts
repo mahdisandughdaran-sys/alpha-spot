@@ -164,6 +164,8 @@ export type AnalysisResult = {
   confidenceNote: string;
   checklist: CheckItem[];
   portfolio: Sleeve[];
+  books: BookCheck[];
+  dataCache: DataCache;
 };
 
 export type CoinDraft = Omit<
@@ -199,6 +201,22 @@ export type UnlockAssessment = {
   cliff: boolean;
   note: string;
 };
+
+export type BookGate = "pass" | "thin" | "crowded" | "unknown";
+
+export type BookCheck = {
+  symbol: string;
+  notionalUsd: number;
+  slippageBps: number | null;
+  depthUsd: number | null;
+  filledPct: number | null;
+  funding8h: number | null;
+  fundingAnnual: number | null;
+  gate: BookGate;
+  note: string;
+};
+
+export type DataCache = "live" | "memory" | "stored";
 
 export type DeskAction = "HOLD" | "SELL" | "REBALANCE";
 

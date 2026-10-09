@@ -1,5 +1,6 @@
 import type {
   AnalysisResult,
+  BookCheck,
   BtcKillSwitch,
   CheckItem,
   CoinRow,
@@ -14,6 +15,7 @@ export function buildChecklist(
     btcDominance: number;
     dominanceBias: DominanceBias;
     kill?: BtcKillSwitch;
+    book?: BookCheck;
   },
 ): CheckItem[] {
   const mcOk =
@@ -38,7 +40,7 @@ export function buildChecklist(
   const liqOk = pick.turnover >= 0.02;
   const emaOk = pick.aboveEma200;
 
-  return [
+  const items: CheckItem[] = [
     {
       key: "mcfdv",
       label: "نسبت MC / FDV",
@@ -109,6 +111,17 @@ export function buildChecklist(
       detail: ctx.kill?.note ?? "فیلتر کلان هنوز محاسبه نشده است.",
     },
   ];
+
+  if (ctx.book && pick.symbol !== "BTC") {
+    items.push({
+      key: "book",
+      label: "دفتر سفارش و فاندینگ",
+      desired: "اسلیپیج زیر ۳۵bps و فاندینگ سالانه زیر ۳۰٪",
+      ok: ctx.book.gate === "pass" ? true : ctx.book.gate === "unknown" ? null : false,
+      detail: ctx.book.note,
+    });
+  }
+  return items;
 }
 
 export function checklistPassCount(items: CheckItem[]): {
