@@ -12,7 +12,9 @@ import { PickPanel } from "@/components/desk/pick-panel";
 import { PortfolioPanel } from "@/components/desk/portfolio-panel";
 import { UnlocksPanel } from "@/components/desk/unlocks-panel";
 import { BacktestPanel } from "@/components/desk/backtest-panel";
+import { DepthPanel } from "@/components/desk/depth-panel";
 import { ExecutePanel } from "@/components/desk/execute-panel";
+import { VenuePanel } from "@/components/desk/venue-panel";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
 import {
   hasSeen,
@@ -35,11 +37,11 @@ export const Route = createFileRoute("/")({ component: Home });
 const STAGES = [
   "گرفتن رتبه، عرضه و حجم صد ارز برتر",
   "ساخت جفت بیت‌کوین، EMA ۲۰۰ و ساختار هفتگی",
-  "کلید قطع بیت‌کوین، آنلاک، دفتر سفارش و فاندینگ",
+  "کلید قطع بیت‌کوین، آنلاک، دفتر سفارش، سود باز و فاندینگ",
   "امتیاز، تعلیق سیگنال و پرتفوی",
 ];
 
-type Tab = "pick" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "execute" | "method" | "history";
+type Tab = "pick" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
 
 function Home() {
   const run = useServerFn(runSpotAnalysis);
@@ -182,7 +184,7 @@ function Home() {
     if (!result) return null;
     return `${result.universeSize} ارز از صد تای اول — استیبل و رپد حذف شده · ${result.klinesOk} کندل کامل · ${
       result.dataCache === "live" ? "داده زنده" : result.dataCache === "memory" ? "از حافظه" : "از کش ذخیره‌شده"
-    }`;
+    } · کش سرور ${result.cacheKlines ?? 0} کندل`;
   }, [result]);
 
   return (
@@ -262,7 +264,9 @@ function Home() {
                   ["portfolio", "پرتفوی"],
                   ["monitor", "پایش سبد"],
                   ["backtest", "بک‌تست"],
-                  ["execute", "اجرا"],
+                  ["depth", "عمق"],
+                  ["execute", "وب‌هوک"],
+                  ["venue", "صرافی"],
                   ["method", "روش"],
                   ["history", "سابقه"],
                 ] as const
@@ -300,7 +304,9 @@ function Home() {
             {tab === "portfolio" ? <PortfolioPanel result={result} /> : null}
             {tab === "monitor" ? <MonitorPanel result={result} /> : null}
             {tab === "backtest" ? <BacktestPanel /> : null}
+            {tab === "depth" ? <DepthPanel books={result.books} /> : null}
             {tab === "execute" ? <ExecutePanel result={result} /> : null}
+            {tab === "venue" ? <VenuePanel result={result} /> : null}
             {tab === "method" ? <Methodology /> : null}
             {tab === "history" ? <HistoryPanel runs={history} /> : null}
           </>

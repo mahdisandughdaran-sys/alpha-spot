@@ -1,4 +1,4 @@
-import { i as __toESM } from "../_runtime.mjs";
+import { o as __toESM } from "../_runtime.mjs";
 import { n as require_react, t as useComposedRefs } from "./@radix-ui/react-compose-refs+[...].mjs";
 //#region node_modules/@radix-ui/react-slot/dist/index.mjs
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
@@ -76,6 +76,7 @@ function mergeProps(slotProps, childProps) {
 			...childPropValue
 		};
 		else if (propName === "className") overrideProps[propName] = [slotPropValue, childPropValue].filter(Boolean).join(" ");
+		else if (propName === "aria-describedby") overrideProps[propName] = concatAriaDescribedby(childPropValue, slotPropValue);
 	}
 	return {
 		...slotProps,
@@ -106,6 +107,15 @@ function isPromiseLike(value) {
 	return typeof value === "object" && value !== null && "then" in value;
 }
 __name(isPromiseLike, "isPromiseLike");
+function concatAriaDescribedby(...values) {
+	const ids = /* @__PURE__ */ new Set();
+	for (const value of values) {
+		if (typeof value !== "string") continue;
+		for (const id of String(value).trim().split(/\s+/)) if (id) ids.add(id);
+	}
+	return ids.size > 0 ? Array.from(ids).join(" ") : void 0;
+}
+__name(concatAriaDescribedby, "concatAriaDescribedby");
 var createSlotError = /* @__PURE__ */ __name((ownerName) => {
 	return `${ownerName} failed to slot onto its children. Expected a single React element child or \`Slottable\`.`;
 }, "createSlotError");

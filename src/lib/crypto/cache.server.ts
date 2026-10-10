@@ -78,3 +78,23 @@ export async function writeCache(key: string, payload: string): Promise<void> {
     }
   });
 }
+
+export async function cacheHealth(): Promise<{ rows: number; klines: number }> {
+  return enqueue(async () => {
+    try {
+      const sql = await getSql();
+      const rows = await sql<{ rows: unknown; klines: unknown }>`
+        select count(*) as rows,
+               sum(case when cache_key like 'k:220:%' then 1 else 0 end) as klines
+        from market_cache
+      `;
+      const row = rows[0];
+      return {
+        rows: Number(row?.rows ?? 0) || 0,
+        klines: Number(row?.klines ?? 0) || 0,
+      };
+    } catch {
+      return { rows: 0, klines: 0 };
+    }
+  });
+}

@@ -1,4 +1,4 @@
-import { n as __exportAll } from "../_runtime.mjs";
+import { r as __exportAll } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { A as getScriptPreloadAttrs, B as isDangerousProtocol, D as toCrossJSONStream, E as toCrossJSONAsync, F as _getRenderedMatches, G as rootRouteId, I as executeRewriteInput, K as isNotFound, L as invariant, M as resolveManifestAssetLink, N as resolveManifestCssLink, P as waitForReason, U as isRedirect, V as isPromise, W as parseRedirect, a as isSsrResponse, b as require_jsx_runtime, c as stripSsrResponseBody, i as disposeSsrResponse, j as getStylesheetHref, n as bindSsrResponseToRequest, o as normalizeSsrResponse, p as RouterProvider, r as defineHandlerCallback, s as replaceSsrResponse, t as renderRouterToStream, w as fromJSON } from "../_libs/@tanstack/react-router+[...].mjs";
 import { n as createServerHistory } from "../_libs/tanstack__history.mjs";
@@ -104,7 +104,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-djYVHsh1.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-EyWihNaA.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -123,10 +123,28 @@ async function getStartManifest(matchedRoutes) {
 		routes: manifestRoutes
 	};
 }
-var manifest = { "2975be20775612443781264b5ca2666618f65f485e3407bef4ba4edec84f952e": {
-	functionName: "runSpotAnalysis_createServerFn_handler",
-	importer: () => import("./analyze-4w4RNT1k.mjs")
-} };
+var manifest = {
+	"2430eb14739b94c669f882053cb7ce0e872ee809f7eb597b1f6e667f4e495a81": {
+		functionName: "checkDeskPulse_createServerFn_handler",
+		importer: () => import("./ops-9Nqy4v8R.mjs")
+	},
+	"2975be20775612443781264b5ca2666618f65f485e3407bef4ba4edec84f952e": {
+		functionName: "runSpotAnalysis_createServerFn_handler",
+		importer: () => import("./analyze-Dslb7Kef.mjs")
+	},
+	"b5f74dffff4b6c35ce44b7129d8d5ebb42b2ff29c152c819a7d42fa5ca8fc035": {
+		functionName: "runSpotBacktest_createServerFn_handler",
+		importer: () => import("./ops-9Nqy4v8R.mjs")
+	},
+	"d6d9cdc69038feacef9008e70b9d27c67fb1b102a7bbc2e3a99d3ce283b3fa4b": {
+		functionName: "dispatchDeskSignal_createServerFn_handler",
+		importer: () => import("./ops-9Nqy4v8R.mjs")
+	},
+	"eed7d3073443c33758c00a8a490ad465452ee6d3f46e47d1fde88dd2a65e227a": {
+		functionName: "runVenue_createServerFn_handler",
+		importer: () => import("./ops-9Nqy4v8R.mjs")
+	}
+};
 async function getServerFnById(id, access) {
 	const serverFnInfo = manifest[id];
 	if (!serverFnInfo) throw new Error("Server function info not found for " + id);
@@ -1529,7 +1547,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-cL0Ho7XV.mjs").then((n) => n.t),
+		import("./router-C75w4Xbg.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);

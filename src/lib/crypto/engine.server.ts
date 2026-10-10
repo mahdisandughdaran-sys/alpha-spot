@@ -12,7 +12,7 @@ import { buildPortfolio } from "./portfolio.ts";
 import { confidenceOf, explainPick } from "./explain.ts";
 import { evaluateKillSwitch } from "./kill-switch.ts";
 import { loadUnlockAssessments } from "./unlocks.server.ts";
-import { readCache, readCachePrefix, writeCache } from "./cache.server.ts";
+import { readCache, readCachePrefix, writeCache, cacheHealth } from "./cache.server.ts";
 import { applyBookGate } from "./microstructure.ts";
 import { loadTopBooks } from "./microstructure.server.ts";
 import type { AnalysisResult, BookCheck, CoinDraft, DataCache, PairPoint, UnlockAssessment } from "./types.ts";
@@ -20,7 +20,7 @@ import type { AnalysisResult, BookCheck, CoinDraft, DataCache, PairPoint, Unlock
 const PAPRIKA = "https://api.coinpaprika.com/v1";
 const BINANCE = "https://data-api.binance.vision/api/v3";
 const CACHE_MS = 2 * 60 * 1000;
-const ANALYSIS_KEY = "analysis:spot:v3";
+const ANALYSIS_KEY = "analysis:spot:v4";
 const ANALYSIS_FRESH = 2 * 60;
 const ANALYSIS_STALE = 6 * 60 * 60;
 const KLINE_FRESH = 6 * 60 * 60;
@@ -207,6 +207,8 @@ async function readStoredAnalysis(maxAgeSec: number): Promise<AnalysisResult | n
   try {
     const parsed = JSON.parse(raw) as AnalysisResult;
     if (!parsed?.pick?.symbol || !parsed.killSwitch) return null;
+    parsed.cacheRows = parsed.cacheRows ?? 0;
+    parsed.cacheKlines = parsed.cacheKlines ?? 0;
     return parsed;
   } catch {
     return null;
@@ -429,7 +431,23 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   );
   let books: BookCheck[] = [];
   try {
-    books = await loadTopBooks(scored.slice(0, 8).map((row) => row.symbol));
+    const targets: { symbol: string; smallCap: boolean }[] = [];
+    const seen = new Set<string>();
+    const push = (symbol: string, smallCap: boolean) => {
+      if (!symbol || symbol === "BTC" || seen.has(symbol) || targets.length >= 12) return;
+      seen.add(symbol);
+      targets.push({ symbol, smallCap });
+    };
+    for (const row of scored) {
+      if (targets.length >= 6) break;
+      push(row.symbol, false);
+    }
+    for (const row of scored) {
+      const small = row.rank >= 40 || row.marketCap < 2_000_000_000;
+      if (!small || row.volume24h < 4_000_000) continue;
+      push(row.symbol, true);
+    }
+    books = await loadTopBooks(targets);
   } catch {
     books = [];
   }
@@ -468,7 +486,7 @@ async function computeAnalysis(): Promise<AnalysisResult> {
       `دفتر سفارش نازک بود و سیگنال خرید این‌ها معلق شد: ${rejected.join("، ")}.`,
     );
   }
-  if (pickBook?.gate === "crowded") {
+  if (pickBook?.gate === "crowded" || pickBook?.gate === "levered") {
     caution.unshift(pickBook.note);
   }
   if (killSwitch.active) {
@@ -494,6 +512,8 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   const portfolio = buildPortfolio(scored, regime, killSwitch);
   const sawBook = books.some((book) => book.slippageBps != null);
   const sawFunding = books.some((book) => book.funding8h != null);
+  const sawOi = books.some((book) => book.openInterestUsd != null);
+  const health = await cacheHealth();
 
   const result: AnalysisResult = {
     generatedAt: new Date().toISOString(),
@@ -502,6 +522,7 @@ async function computeAnalysis(): Promise<AnalysisResult> {
       ...(btcParsed ? ["Binance"] : []),
       ...(sawBook ? ["Order book"] : []),
       ...(sawFunding ? ["Funding"] : []),
+      ...(sawOi ? ["Open interest"] : []),
       ...(unlockSource === "coinmarketcap" ? ["CMC Unlocks"] : []),
     ],
     btcDominance: global.bitcoin_dominance_percentage,
@@ -531,6 +552,8 @@ async function computeAnalysis(): Promise<AnalysisResult> {
     portfolio,
     books,
     dataCache: "live" satisfies DataCache,
+    cacheRows: health.rows,
+    cacheKlines: health.klines,
   };
 
   return result;

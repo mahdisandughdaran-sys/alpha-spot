@@ -166,6 +166,8 @@ export type AnalysisResult = {
   portfolio: Sleeve[];
   books: BookCheck[];
   dataCache: DataCache;
+  cacheRows: number;
+  cacheKlines: number;
 };
 
 export type CoinDraft = Omit<
@@ -202,7 +204,7 @@ export type UnlockAssessment = {
   note: string;
 };
 
-export type BookGate = "pass" | "thin" | "crowded" | "unknown";
+export type BookGate = "pass" | "thin" | "crowded" | "levered" | "unknown";
 
 export type BookCheck = {
   symbol: string;
@@ -212,6 +214,10 @@ export type BookCheck = {
   filledPct: number | null;
   funding8h: number | null;
   fundingAnnual: number | null;
+  openInterestUsd: number | null;
+  oiChange24h: number | null;
+  longShortRatio: number | null;
+  smallCap: boolean;
   gate: BookGate;
   note: string;
 };

@@ -1,4 +1,4 @@
-import { i as __toESM, r as __require, t as __commonJSMin } from "../../_runtime.mjs";
+import { i as __require, o as __toESM, t as __commonJSMin } from "../../_runtime.mjs";
 import { n as require_react } from "../@radix-ui/react-compose-refs+[...].mjs";
 import { i as parseHref, r as normalizeProtocolRelative } from "../tanstack__history.mjs";
 import { PassThrough, Readable } from "node:stream";
@@ -4225,31 +4225,6 @@ var SPECIAL_REF_STRING = {
 	[4]: SERIALIZED_STREAM_CONSTRUCTOR,
 	[5]: SERIALIZED_ARRAY_BUFFER_CONSTRUCTOR
 };
-function _checkPrivateRedeclaration(e, t) {
-	if (t.has(e)) throw new TypeError("Cannot initialize the same private elements twice on an object");
-}
-function _classPrivateMethodInitSpec(e, a) {
-	_checkPrivateRedeclaration(e, a), a.add(e);
-}
-function _classPrivateFieldInitSpec(e, t, a) {
-	_checkPrivateRedeclaration(e, t), t.set(e, a);
-}
-function _assertClassBrand(e, t, n) {
-	if ("function" == typeof e ? e === t : e.has(t)) return arguments.length < 3 ? t : n;
-	throw new TypeError("Private element is not present on this object");
-}
-function _classPrivateFieldGet2(s, a) {
-	return s.get(_assertClassBrand(s, a));
-}
-function _classPrivateFieldSet2(s, a, r) {
-	return s.set(_assertClassBrand(s, a), r), r;
-}
-var _buffer = /* @__PURE__ */ new WeakMap();
-var _listeners = /* @__PURE__ */ new WeakMap();
-var _alive = /* @__PURE__ */ new WeakMap();
-var _success = /* @__PURE__ */ new WeakMap();
-var _count = /* @__PURE__ */ new WeakMap();
-var _Stream_brand = /* @__PURE__ */ new WeakSet();
 /**
 * An internal class rather than a tagged POJO: identity is checked with
 * `instanceof`, which untrusted input cannot forge (the class is not exported).
@@ -4263,75 +4238,68 @@ var _Stream_brand = /* @__PURE__ */ new WeakSet();
 */
 var Stream = class {
 	constructor() {
-		_classPrivateMethodInitSpec(this, _Stream_brand);
-		_classPrivateFieldInitSpec(this, _buffer, []);
-		_classPrivateFieldInitSpec(this, _listeners, []);
-		_classPrivateFieldInitSpec(this, _alive, true);
-		_classPrivateFieldInitSpec(this, _success, false);
-		_classPrivateFieldInitSpec(this, _count, 0);
+		this.buffer = [];
+		this.listeners = [];
+		this.alive = true;
+		this.success = false;
+		this.count = 0;
+	}
+	flush(value, mode) {
+		for (let x = 0; x < this.count; x++) {
+			var _this$listeners$x;
+			(_this$listeners$x = this.listeners[x]) === null || _this$listeners$x === void 0 || _this$listeners$x[mode](value);
+		}
+	}
+	replay(listener) {
+		for (let x = 0, z = this.buffer.length; x < z; x++) {
+			const current = this.buffer[x];
+			if (!this.alive && x === z - 1) listener[this.success ? "return" : "throw"](current);
+			else listener.next(current);
+		}
 	}
 	on(listener) {
-		let subscribed = _classPrivateFieldGet2(_alive, this);
+		let subscribed = this.alive;
 		let temp = 0;
 		if (subscribed) {
-			for (; temp < _classPrivateFieldGet2(_count, this); temp++) if (!_classPrivateFieldGet2(_listeners, this)[temp]) break;
-			if (temp === _classPrivateFieldGet2(_count, this)) {
-				var _this$count;
-				_classPrivateFieldSet2(_count, this, (_this$count = _classPrivateFieldGet2(_count, this), _this$count++, _this$count));
-			}
-			_classPrivateFieldGet2(_listeners, this)[temp] = listener;
+			for (; temp < this.count; temp++) if (!this.listeners[temp]) break;
+			if (temp === this.count) this.count++;
+			this.listeners[temp] = listener;
 		}
-		_assertClassBrand(_Stream_brand, this, _replay).call(this, listener);
+		this.replay(listener);
 		return () => {
-			if (_classPrivateFieldGet2(_alive, this) && subscribed) {
+			if (this.alive && subscribed) {
 				subscribed = false;
-				_classPrivateFieldGet2(_listeners, this)[temp] = void 0;
-				while (_classPrivateFieldGet2(_count, this) > 0 && !_classPrivateFieldGet2(_listeners, this)[_classPrivateFieldGet2(_count, this) - 1]) {
-					var _this$count3;
-					_classPrivateFieldSet2(_count, this, (_this$count3 = _classPrivateFieldGet2(_count, this), _this$count3--, _this$count3));
-				}
-				_classPrivateFieldGet2(_listeners, this).length = _classPrivateFieldGet2(_count, this);
+				this.listeners[temp] = void 0;
+				while (this.count > 0 && !this.listeners[this.count - 1]) this.count--;
+				this.listeners.length = this.count;
 			}
 		};
 	}
 	next(value) {
-		if (_classPrivateFieldGet2(_alive, this)) {
-			_classPrivateFieldGet2(_buffer, this).push(value);
-			_assertClassBrand(_Stream_brand, this, _flush).call(this, value, "next");
+		if (this.alive) {
+			this.buffer.push(value);
+			this.flush(value, "next");
 		}
 	}
 	throw(value) {
-		if (_classPrivateFieldGet2(_alive, this)) {
-			_classPrivateFieldGet2(_buffer, this).push(value);
-			_assertClassBrand(_Stream_brand, this, _flush).call(this, value, "throw");
-			_classPrivateFieldSet2(_alive, this, false);
-			_classPrivateFieldSet2(_success, this, false);
-			_classPrivateFieldGet2(_listeners, this).length = 0;
+		if (this.alive) {
+			this.buffer.push(value);
+			this.flush(value, "throw");
+			this.alive = false;
+			this.success = false;
+			this.listeners.length = 0;
 		}
 	}
 	return(value) {
-		if (_classPrivateFieldGet2(_alive, this)) {
-			_classPrivateFieldGet2(_buffer, this).push(value);
-			_assertClassBrand(_Stream_brand, this, _flush).call(this, value, "return");
-			_classPrivateFieldSet2(_alive, this, false);
-			_classPrivateFieldSet2(_success, this, true);
-			_classPrivateFieldGet2(_listeners, this).length = 0;
+		if (this.alive) {
+			this.buffer.push(value);
+			this.flush(value, "return");
+			this.alive = false;
+			this.success = true;
+			this.listeners.length = 0;
 		}
 	}
 };
-function _flush(value, mode) {
-	for (let x = 0; x < _classPrivateFieldGet2(_count, this); x++) {
-		var _classPrivateFieldGet2$1;
-		(_classPrivateFieldGet2$1 = _classPrivateFieldGet2(_listeners, this)[x]) === null || _classPrivateFieldGet2$1 === void 0 || _classPrivateFieldGet2$1[mode](value);
-	}
-}
-function _replay(listener) {
-	for (let x = 0, z = _classPrivateFieldGet2(_buffer, this).length; x < z; x++) {
-		const current = _classPrivateFieldGet2(_buffer, this)[x];
-		if (!_classPrivateFieldGet2(_alive, this) && x === z - 1) listener[_classPrivateFieldGet2(_success, this) ? "return" : "throw"](current);
-		else listener.next(current);
-	}
-}
 function isStream(value) {
 	return value instanceof Stream;
 }
