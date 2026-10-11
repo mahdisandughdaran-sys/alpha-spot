@@ -13151,4 +13151,4 @@ var AreaChart = generateCategoricalChart({
 	formatAxisMap
 });
 //#endregion
-export { Area as a, ResponsiveContainer as c, XAxis as i, Tooltip as l, LineChart as n, Line as o, YAxis as r, ReferenceLine as s, AreaChart as t };
+export { Area as a, ReferenceLine as c, XAxis as i, ResponsiveContainer as l, LineChart as n, Line as o, YAxis as r, ReferenceArea as s, AreaChart as t, Tooltip as u };

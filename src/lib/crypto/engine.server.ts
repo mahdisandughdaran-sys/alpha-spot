@@ -15,12 +15,13 @@ import { loadUnlockAssessments } from "./unlocks.server.ts";
 import { readCache, readCachePrefix, writeCache, cacheHealth } from "./cache.server.ts";
 import { applyBookGate } from "./microstructure.ts";
 import { loadTopBooks } from "./microstructure.server.ts";
+import { emptyOpportunityBoard, scanOpportunities, type SpotBar } from "./opportunity.ts";
 import type { AnalysisResult, BookCheck, CoinDraft, DataCache, PairPoint, UnlockAssessment } from "./types.ts";
 
 const PAPRIKA = "https://api.coinpaprika.com/v1";
 const BINANCE = "https://data-api.binance.vision/api/v3";
 const CACHE_MS = 2 * 60 * 1000;
-const ANALYSIS_KEY = "analysis:spot:v4";
+const ANALYSIS_KEY = "analysis:spot:v5";
 const ANALYSIS_FRESH = 2 * 60;
 const ANALYSIS_STALE = 6 * 60 * 60;
 const KLINE_FRESH = 6 * 60 * 60;
@@ -120,25 +121,45 @@ async function mapPool<T, R>(
   return out;
 }
 
-type ParsedKlines = { times: number[]; closes: number[]; volumes: number[] };
+type ParsedKlines = {
+  times: number[];
+  opens: number[];
+  highs: number[];
+  lows: number[];
+  closes: number[];
+  volumes: number[];
+  quotes: number[];
+};
 
 function parseKlines(raw: unknown): ParsedKlines | null {
   if (!Array.isArray(raw) || raw.length < 8) return null;
   const times: number[] = [];
+  const opens: number[] = [];
+  const highs: number[] = [];
+  const lows: number[] = [];
   const closes: number[] = [];
   const volumes: number[] = [];
+  const quotes: number[] = [];
   for (const row of raw) {
     if (!Array.isArray(row)) continue;
     const t = Number(row[0]);
+    const o = Number(row[1]);
+    const h = Number(row[2]);
+    const l = Number(row[3]);
     const c = Number(row[4]);
     const v = Number(row[5]);
-    if (!Number.isFinite(t) || !Number.isFinite(c)) continue;
+    const q = Number(row[7]);
+    if (!Number.isFinite(t) || !Number.isFinite(c) || c <= 0) continue;
     times.push(t);
+    opens.push(Number.isFinite(o) && o > 0 ? o : c);
+    highs.push(Number.isFinite(h) && h > 0 ? h : c);
+    lows.push(Number.isFinite(l) && l > 0 ? l : c);
     closes.push(c);
     volumes.push(Number.isFinite(v) ? v : 0);
+    quotes.push(Number.isFinite(q) ? q : 0);
   }
   if (closes.length < 8) return null;
-  return { times, closes, volumes };
+  return { times, opens, highs, lows, closes, volumes, quotes };
 }
 
 function alignPair(coin: ParsedKlines, btc: ParsedKlines): number[] {
@@ -201,12 +222,30 @@ async function loadKline(
   return parsed;
 }
 
+function barsOf(parsed: ParsedKlines): SpotBar[] {
+  const out: SpotBar[] = [];
+  for (let i = 0; i < parsed.closes.length; i++) {
+    const c = parsed.closes[i] ?? 0;
+    if (c <= 0) continue;
+    out.push({
+      t: parsed.times[i] ?? i,
+      o: parsed.opens[i] || c,
+      h: parsed.highs[i] || c,
+      l: parsed.lows[i] || c,
+      c,
+      v: parsed.volumes[i] ?? 0,
+      q: parsed.quotes[i] ?? 0,
+    });
+  }
+  return out;
+}
+
 async function readStoredAnalysis(maxAgeSec: number): Promise<AnalysisResult | null> {
   const raw = await readCache(ANALYSIS_KEY, maxAgeSec);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as AnalysisResult;
-    if (!parsed?.pick?.symbol || !parsed.killSwitch) return null;
+    if (!parsed?.pick?.symbol || !parsed.killSwitch || !parsed.opportunities?.items) return null;
     parsed.cacheRows = parsed.cacheRows ?? 0;
     parsed.cacheKlines = parsed.cacheKlines ?? 0;
     return parsed;
@@ -514,9 +553,40 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   const sawFunding = books.some((book) => book.funding8h != null);
   const sawOi = books.some((book) => book.openInterestUsd != null);
   const health = await cacheHealth();
+  const generatedAt = new Date().toISOString();
+  let opportunities = emptyOpportunityBoard(
+    generatedAt,
+    "اسکنر فرصت اجرا نشد؛ رتبه‌بندی فعلی میز دست نخورده است.",
+  );
+  try {
+    const btcBars = btcParsed ? barsOf(btcParsed) : [];
+    const inputs = drafts.map((draft) => {
+      const parsed = draft.symbol === "BTC" ? btcParsed : klineById.get(draft.id)?.usd ?? null;
+      return {
+        symbol: draft.symbol,
+        name: draft.name,
+        rank: draft.rank,
+        priceUsd: draft.priceUsd,
+        volume24h: draft.volume24h,
+        turnover: draft.turnover,
+        bars: parsed ? barsOf(parsed) : [],
+        btcCloses: btcBars.map((bar) => bar.c),
+      };
+    });
+    opportunities = scanOpportunities(inputs, {
+      generatedAt,
+      regime,
+      spotBuys: killSwitch.spotBuys,
+    });
+  } catch {
+    opportunities = emptyOpportunityBoard(
+      generatedAt,
+      "اسکنر فرصت به خطا خورد و نتیجه آن کنار گذاشته شد. انتخاب اصلی میز همچنان معتبر است.",
+    );
+  }
 
   const result: AnalysisResult = {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     sources: [
       "CoinPaprika",
       ...(btcParsed ? ["Binance"] : []),
@@ -551,6 +621,7 @@ async function computeAnalysis(): Promise<AnalysisResult> {
     checklist,
     portfolio,
     books,
+    opportunities,
     dataCache: "live" satisfies DataCache,
     cacheRows: health.rows,
     cacheKlines: health.klines,

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { BacktestReport } from "./backtest.ts";
 import type { DispatchInput, DispatchResult } from "./dispatch.server.ts";
+import type { OpportunityBacktestReport } from "./opportunity-backtest.ts";
 import type { PulseResult } from "./pulse.server.ts";
 import { normalizeVenueCall, type VenueCall, type VenueResult } from "./venues.ts";
 
@@ -10,6 +11,27 @@ export const runSpotBacktest = createServerFn({ method: "POST" }).handler(
     return runHistoricalBacktest();
   },
 );
+
+export const runOpportunityBacktest = createServerFn({ method: "POST" }).handler(
+  async (): Promise<OpportunityBacktestReport> => {
+    const { runOpportunityHistory } = await import("./backtest-data.server.ts");
+    return runOpportunityHistory();
+  },
+);
+
+export const checkOpportunityQuotes = createServerFn({ method: "POST" })
+  .validator((input: { symbols: string[] }) => {
+    if (!input || !Array.isArray(input.symbols)) throw new Error("نمادها نامعتبرند.");
+    return {
+      symbols: input.symbols
+        .filter((symbol) => typeof symbol === "string" && /^[A-Z0-9]{2,15}$/.test(symbol))
+        .slice(0, 40),
+    };
+  })
+  .handler(async ({ data }) => {
+    const { quoteSpot } = await import("./opportunity-pulse.server.ts");
+    return quoteSpot(data.symbols);
+  });
 
 export const checkDeskPulse = createServerFn({ method: "POST" }).handler(
   async (): Promise<PulseResult> => {

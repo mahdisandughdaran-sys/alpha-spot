@@ -1,3 +1,5 @@
+import type { OpportunityBoard } from "./opportunity.ts";
+
 export type FactorKey =
   | "rs"
   | "trend"
@@ -167,6 +169,7 @@ export type AnalysisResult = {
   checklist: CheckItem[];
   portfolio: Sleeve[];
   books: BookCheck[];
+  opportunities: OpportunityBoard;
   dataCache: DataCache;
   cacheRows: number;
   cacheKlines: number;

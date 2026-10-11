@@ -104,7 +104,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-CCcrKQda.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-Bl3SeHI5.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -126,23 +126,31 @@ async function getStartManifest(matchedRoutes) {
 var manifest = {
 	"2430eb14739b94c669f882053cb7ce0e872ee809f7eb597b1f6e667f4e495a81": {
 		functionName: "checkDeskPulse_createServerFn_handler",
-		importer: () => import("./ops-B5gAdKbQ.mjs")
+		importer: () => import("./ops-DmNLxJy0.mjs")
 	},
 	"2975be20775612443781264b5ca2666618f65f485e3407bef4ba4edec84f952e": {
 		functionName: "runSpotAnalysis_createServerFn_handler",
-		importer: () => import("./analyze-Cid6473n.mjs")
+		importer: () => import("./analyze-pnxiFeOg.mjs")
+	},
+	"3d750ceb230c06ac4407a1ae107889436f44c8752c9c19bf5d7306a2a4e8cff8": {
+		functionName: "checkOpportunityQuotes_createServerFn_handler",
+		importer: () => import("./ops-DmNLxJy0.mjs")
+	},
+	"5469c7ef2b6a0c6da8b20e30389ebaa2b621913c5d8e6fe0888226964b424d35": {
+		functionName: "runOpportunityBacktest_createServerFn_handler",
+		importer: () => import("./ops-DmNLxJy0.mjs")
 	},
 	"b5f74dffff4b6c35ce44b7129d8d5ebb42b2ff29c152c819a7d42fa5ca8fc035": {
 		functionName: "runSpotBacktest_createServerFn_handler",
-		importer: () => import("./ops-B5gAdKbQ.mjs")
+		importer: () => import("./ops-DmNLxJy0.mjs")
 	},
 	"d6d9cdc69038feacef9008e70b9d27c67fb1b102a7bbc2e3a99d3ce283b3fa4b": {
 		functionName: "dispatchDeskSignal_createServerFn_handler",
-		importer: () => import("./ops-B5gAdKbQ.mjs")
+		importer: () => import("./ops-DmNLxJy0.mjs")
 	},
 	"eed7d3073443c33758c00a8a490ad465452ee6d3f46e47d1fde88dd2a65e227a": {
 		functionName: "runVenue_createServerFn_handler",
-		importer: () => import("./ops-B5gAdKbQ.mjs")
+		importer: () => import("./ops-DmNLxJy0.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -1547,7 +1555,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-BaK4U2ts.mjs").then((n) => n.t),
+		import("./router-BFHwm1Jg.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);

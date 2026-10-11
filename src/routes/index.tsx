@@ -16,6 +16,7 @@ import { BacktestPanel } from "@/components/desk/backtest-panel";
 import { DepthPanel } from "@/components/desk/depth-panel";
 import { ExecutePanel } from "@/components/desk/execute-panel";
 import { VenuePanel } from "@/components/desk/venue-panel";
+import { OpportunityPanel } from "@/components/desk/opportunity-panel";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
 import {
   hasSeen,
@@ -30,7 +31,15 @@ import {
   toggleWatch,
   type RunSummary,
 } from "@/lib/crypto/history";
-import { checkDeskPulse, dispatchDeskSignal } from "@/lib/crypto/ops";
+import { checkDeskPulse, checkOpportunityQuotes, dispatchDeskSignal } from "@/lib/crypto/ops";
+import {
+  alertsFromQuotes,
+  alertsFromScan,
+  loadOppAlerts,
+  loadOppSnapshot,
+  saveOppAlerts,
+  saveOppSnapshot,
+} from "@/lib/crypto/opportunity-alerts";
 import type { AnalysisResult } from "@/lib/crypto/types";
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -38,15 +47,17 @@ export const Route = createFileRoute("/")({ component: Home });
 const STAGES = [
   "گرفتن رتبه، عرضه و حجم صد ارز برتر",
   "ساخت جفت بیت‌کوین، EMA ۲۰۰ و ساختار هفتگی",
+  "محدوده حمایت، تأیید و ابطال برای فهرست انتظار",
   "کلید قطع بیت‌کوین، آنلاک، دفتر سفارش، سود باز و فاندینگ",
   "امتیاز، تعلیق سیگنال و پرتفوی",
 ];
 
-type Tab = "pick" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
+type Tab = "pick" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
 
 function Home() {
   const run = useServerFn(runSpotAnalysis);
   const pulse = useServerFn(checkDeskPulse);
+  const quotes = useServerFn(checkOpportunityQuotes);
   const sendAlert = useServerFn(dispatchDeskSignal);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [stage, setStage] = useState(0);
@@ -126,6 +137,50 @@ function Home() {
   }, [result, sendAlert, watched]);
 
   useEffect(() => {
+    if (!result?.opportunities) return;
+    const prev = loadOppSnapshot();
+    const fresh = alertsFromScan(prev, result.opportunities.items, result.generatedAt);
+    saveOppSnapshot(result.opportunities.items);
+    if (fresh.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const settings = loadDeskSettings();
+      let stored = loadOppAlerts();
+      for (const alert of fresh) {
+        if (cancelled || hasSeen(alert.id)) continue;
+        markSeen(alert.id);
+        stored = [alert, ...stored.filter((row) => row.id !== alert.id)].slice(0, 40);
+        pushAlert({ id: alert.id, at: alert.at, title: alert.title, text: alert.text });
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification(alert.title, { body: alert.text });
+        }
+        if (settings.webhookUrl || settings.telegramToken) {
+          try {
+            await sendAlert({
+              data: {
+                title: alert.title,
+                text: alert.text,
+                kind: "alert",
+                orders: [],
+                webhookUrl: settings.webhookUrl,
+                telegramToken: settings.telegramToken,
+                telegramChat: settings.telegramChat,
+              },
+            });
+          } catch {
+            /* مقصد هشدار اختیاری است */
+          }
+        }
+        if (!cancelled) setFlash(alert.title);
+      }
+      if (!cancelled) saveOppAlerts(stored);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [result, sendAlert]);
+
+  useEffect(() => {
     const id = window.setInterval(() => {
       void (async () => {
         const settings = loadDeskSettings();
@@ -159,6 +214,45 @@ function Home() {
     }, 180_000);
     return () => window.clearInterval(id);
   }, [pulse, sendAlert]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void (async () => {
+        const snap = loadOppSnapshot();
+        if (snap.length === 0) return;
+        try {
+          const live = await quotes({ data: { symbols: snap.map((row) => row.symbol) } });
+          const found = alertsFromQuotes(snap, live, new Date().toISOString());
+          const settings = loadDeskSettings();
+          let stored = loadOppAlerts();
+          for (const alert of found) {
+            if (hasSeen(alert.id)) continue;
+            markSeen(alert.id);
+            stored = [alert, ...stored.filter((row) => row.id !== alert.id)].slice(0, 40);
+            pushAlert({ id: alert.id, at: alert.at, title: alert.title, text: alert.text });
+            if (settings.webhookUrl || settings.telegramToken) {
+              await sendAlert({
+                data: {
+                  title: alert.title,
+                  text: alert.text,
+                  kind: "alert",
+                  orders: [],
+                  webhookUrl: settings.webhookUrl,
+                  telegramToken: settings.telegramToken,
+                  telegramChat: settings.telegramChat,
+                },
+              });
+            }
+            setFlash(alert.title);
+          }
+          saveOppAlerts(stored);
+        } catch {
+          /* قیمت لحظه‌ای اختیاری است */
+        }
+      })();
+    }, 180_000);
+    return () => window.clearInterval(id);
+  }, [quotes, sendAlert]);
 
   async function onAnalyze() {
     setStatus("loading");
@@ -204,7 +298,7 @@ function Home() {
               <h1 className="text-4xl font-medium tracking-tight text-fg md:text-5xl">آلفا اسپات</h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
                 هر ارز با نمادش دیده می‌شود. مدل صد دارایی اول را در برابر بیت‌کوین
-                می‌سنجد و روی نمودار انتخاب اول، بهترین نقطه خرید همان بازه را علامت می‌زند.
+                می‌سنجد، و جدا از آن فرصت‌هایی را که هنوز آماده نیستند ولی محدوده و شرط ابطال دارند زیر نظر می‌گیرد.
               </p>
             </div>
             <Button
@@ -261,6 +355,7 @@ function Home() {
               {(
                 [
                   ["pick", "انتخاب"],
+                  ["opportunity", "فرصت‌ها"],
                   ["table", "رتبه‌ها"],
                   ["unlocks", "آنلاک"],
                   ["portfolio", "پرتفوی"],
@@ -288,6 +383,7 @@ function Home() {
               ))}
             </nav>
             {tab === "pick" ? <PickPanel result={result} /> : null}
+            {tab === "opportunity" ? <OpportunityPanel board={result.opportunities} /> : null}
             {tab === "table" ? (
               <Leaderboard
                 rows={result.top}

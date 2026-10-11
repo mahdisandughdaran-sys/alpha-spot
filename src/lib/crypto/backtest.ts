@@ -4,7 +4,14 @@ import { maxDrawdown } from "./math.ts";
 import { detectRegime, enrichFromKlines, pickWinner, scoreUniverse } from "./scoring.ts";
 import type { CoinDraft } from "./types.ts";
 
-export type BtBar = { t: number; c: number; q: number };
+export type BtBar = {
+  t: number;
+  c: number;
+  q: number;
+  o?: number;
+  h?: number;
+  l?: number;
+};
 
 export type BtSeries = {
   symbol: string;

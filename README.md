@@ -70,8 +70,10 @@ tail -f .dev-server.log
 2. Tap **تحلیل ۱۰۰ ارز برتر**.
 3. Wait a few seconds. The server pulls the top ranks, builds each coin’s BTC-pair series, and scores five factors.
 4. Read **انتخاب** (the pick, reasons, 30-day BTC-pair chart, factor bars).
-5. Open **رتبه‌ها** for the top 12 scores, or **روش** for the weights.
-6. Tap **تحلیل دوباره** to refresh. Results are cached for two minutes.
+5. Open **فرصت‌ها** for names that are not a buy yet. Each one shows a zone, why that zone was chosen, what would confirm it, and what would invalidate it. Touching the price is not confirmation.
+6. Open **رتبه‌ها** for the top 12 scores, or **روش** for the weights.
+7. Tap **تحلیل دوباره** to refresh. Full results are cached for two minutes. A lighter price check, about every three minutes, only warns when a saved zone is near, touched, or preliminarily broken.
+8. In **فرصت‌ها**, run **بک‌تست فرصت**. It keeps a fee of 10 bps and slippage of 8 bps per side, and it will say when there are not enough confirmed trades. Past results are not future results.
 
 This is not investment advice.
 
@@ -92,8 +94,8 @@ This is not investment advice.
 
 ```text
 src/routes/index.tsx          desk UI (idle, loading, pick / ranks / method)
-src/components/desk/          pick card, chart, factor bars, leaderboard
-src/lib/crypto/               fetch, scoring, exclusions, Persian explanations
+src/components/desk/          pick card, chart, factor bars, leaderboard, opportunity desk
+src/lib/crypto/               fetch, scoring, opportunity zones, exclusions, Persian explanations
 public/fonts/                 Vazirmatn + IBM Plex Mono (no Google Fonts)
 startup.sh                    portable restart helper
 ```

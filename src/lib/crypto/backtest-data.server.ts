@@ -1,5 +1,6 @@
 import { readCache, writeCache } from "./cache.server.ts";
-import { BACKTEST_UNIVERSE, simulateSpotBacktest, type BtBar, type BacktestReport } from "./backtest.ts";
+import { BACKTEST_UNIVERSE, simulateSpotBacktest, type BtBar, type BacktestReport, type BtSeries } from "./backtest.ts";
+import { simulateOpportunityBacktest, type OpportunityBacktestReport } from "./opportunity-backtest.ts";
 
 const BINANCE = "https://data-api.binance.vision/api/v3";
 const FRESH_SEC = 12 * 60 * 60;
@@ -13,10 +14,20 @@ function barsFrom(raw: unknown): BtBar[] {
   for (const row of raw) {
     if (!Array.isArray(row)) continue;
     const t = Number(row[0]);
+    const o = Number(row[1]);
+    const h = Number(row[2]);
+    const l = Number(row[3]);
     const c = Number(row[4]);
     const q = Number(row[7]);
     if (!Number.isFinite(t) || !Number.isFinite(c) || c <= 0) continue;
-    out.push({ t, c, q: Number.isFinite(q) ? q : 0 });
+    out.push({
+      t,
+      o: Number.isFinite(o) ? o : c,
+      h: Number.isFinite(h) ? h : c,
+      l: Number.isFinite(l) ? l : c,
+      c,
+      q: Number.isFinite(q) ? q : 0,
+    });
   }
   out.sort((a, b) => a.t - b.t);
   return out;
@@ -91,4 +102,20 @@ export async function runHistoricalBacktest(): Promise<BacktestReport> {
     return simulateSpotBacktest([]);
   }
   return simulateSpotBacktest(series);
+}
+
+export async function runOpportunityHistory(): Promise<OpportunityBacktestReport> {
+  const series: BtSeries[] = [];
+  const queue = [...BACKTEST_UNIVERSE];
+  let cursor = 0;
+  async function worker() {
+    while (cursor < queue.length) {
+      const item = queue[cursor++];
+      if (!item) continue;
+      const bars = await loadSymbol(item.symbol);
+      if (bars) series.push({ ...item, bars });
+    }
+  }
+  await Promise.all(Array.from({ length: 4 }, () => worker()));
+  return simulateOpportunityBacktest(series);
 }

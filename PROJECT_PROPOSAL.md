@@ -4,6 +4,14 @@ Date: 6 October 2026
 Source archive: `grok-workspace-3.zip` (2.3 MB, 345 files)
 Local checkout: `~/alpha-spot`
 
+## Opportunity desk (11 October 2026)
+
+The original pick is unchanged: one spot candidate versus Bitcoin, including Bitcoin itself.
+
+A second, separate scanner watches coins that are **not** ready. It builds a zone only from confirmed swing lows (two touches, or one touch next to the 50-day average). ATR sets the band and the invalidation price. RSI and MACD are confirmation only. A lower price is not a factor. If the rules cannot be measured, the status is «فرصت تأییدنشده».
+
+Alerts dedupe by symbol, kind, zone, and day. The three-minute pulse can say a live price entered a zone; it cannot confirm a daily close. The opportunity backtest enters only on the close that confirmed, then uses later bars, with 10 bps fees and 8 bps slippage. Weights were not fitted on that sample. A small sample is reported as insufficient, not as an edge.
+
 ## 1. Goal
 
 Give a Persian-speaking spot trader one auditable answer: among the top 100 coins, which asset is the better **spot** buy **relative to Bitcoin** right now — including the possibility that the answer is Bitcoin.
