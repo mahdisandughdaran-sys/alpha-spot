@@ -166,6 +166,12 @@ export function enrichFromKlines(draft: CoinDraft): CoinDraft {
     t: i,
     v: first ? (v / first) * 100 : 100,
   }));
+  const usdWindow = usd.slice(-31);
+  const usdFirst = usdWindow[0] ?? 1;
+  const spotIndex = usdWindow.map((v, i) => ({
+    t: i,
+    v: usdFirst ? (v / usdFirst) * 100 : 100,
+  }));
 
   return {
     ...draft,
@@ -185,6 +191,7 @@ export function enrichFromKlines(draft: CoinDraft): CoinDraft {
     pairWeekly,
     pairSupportBroken: supportBroken,
     pairSeries,
+    spotIndex,
   };
 }
 

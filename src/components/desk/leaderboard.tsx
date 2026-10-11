@@ -1,6 +1,7 @@
 import { Star } from "lucide-react";
 import type { CoinRow } from "@/lib/crypto/types";
 import { btcPriceLabel } from "@/lib/crypto/explain";
+import { CoinMark } from "./coin-mark";
 import { formatPct, formatScore, formatUsd } from "./format";
 
 export function Leaderboard({
@@ -25,7 +26,53 @@ export function Leaderboard({
           </p>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="flex flex-col gap-2 px-3 pb-3 md:hidden">
+        {rows.map((row, i) => {
+          const active = row.symbol === picked;
+          const starred = watched.includes(row.symbol);
+          const rsTone = row.rs7d > 0 ? "text-up" : row.rs7d < 0 ? "text-down" : "text-fg";
+          return (
+            <article
+              key={row.id}
+              className={
+                active
+                  ? "rounded-lg bg-elevated p-3 shadow-[var(--shadow-border)]"
+                  : "rounded-lg bg-bg p-3 shadow-[var(--shadow-border)]"
+              }
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-start gap-2">
+                  <span className="num pt-2 text-xs text-subtle">{i + 1}</span>
+                  <CoinMark symbol={row.symbol} name={row.name} rank={row.rank} size="sm" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onToggleWatch(row.symbol)}
+                  className="flex size-11 items-center justify-center rounded-md text-subtle"
+                  aria-label={starred ? "حذف از واچ‌لیست" : "افزودن به واچ‌لیست"}
+                >
+                  <Star className="size-4" fill={starred ? "currentColor" : "none"} />
+                </button>
+              </div>
+              <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <dt className="text-subtle">امتیاز</dt>
+                  <dd className="num mt-1 text-fg">{formatScore(row.score)}</dd>
+                </div>
+                <div>
+                  <dt className="text-subtle">۷ر vs BTC</dt>
+                  <dd className={`num mt-1 ${rsTone}`}>{formatPct(row.rs7d)}</dd>
+                </div>
+                <div>
+                  <dt className="text-subtle">قیمت</dt>
+                  <dd className="num mt-1 text-fg">${formatUsd(row.priceUsd)}</dd>
+                </div>
+              </dl>
+            </article>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[920px] text-sm">
           <thead>
             <tr className="border-t border-border text-xs text-subtle">
@@ -72,13 +119,7 @@ export function Leaderboard({
                   </td>
                   <td className="num px-4 py-3 text-subtle">{i + 1}</td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-col">
-                      <span className="text-fg">{row.name}</span>
-                      <span className="num text-xs text-subtle">
-                        {row.symbol}
-                        {row.narrativeTagsFa[0] ? ` · ${row.narrativeTagsFa[0]}` : ""}
-                      </span>
-                    </div>
+                    <CoinMark symbol={row.symbol} name={row.name} rank={row.rank} size="sm" />
                   </td>
                   <td className="num px-4 py-3 text-fg">{formatScore(row.score)}</td>
                   <td className={`num px-4 py-3 ${rsTone}`}>{formatPct(row.rs7d)}</td>

@@ -115,9 +115,10 @@
 .desk-grid {
   background-color: var(--color-bg);
   background-image:
+    linear-gradient(to bottom, rgb(241 242 244 / 0.04), transparent 280px),
     linear-gradient(to bottom, rgb(241 242 244 / 0.035) 1px, transparent 1px),
     linear-gradient(to left, rgb(241 242 244 / 0.035) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background-size: auto, 48px 48px, 48px 48px;
   background-position: center top;
 }
 

@@ -85,6 +85,8 @@ export type CoinRow = {
   hasKlines: boolean;
   klineDays: number;
   pairSeries: PairPoint[];
+  /** Indexed USD path. Used when the pick is Bitcoin and the BTC pair is flat. */
+  spotIndex?: PairPoint[];
   turnover: number;
   circulatingSupply: number | null;
   maxSupply: number | null;

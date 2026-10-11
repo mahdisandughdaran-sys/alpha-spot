@@ -10,6 +10,7 @@ import { Methodology } from "@/components/desk/methodology";
 import { MonitorPanel } from "@/components/desk/monitor-panel";
 import { PickPanel } from "@/components/desk/pick-panel";
 import { PortfolioPanel } from "@/components/desk/portfolio-panel";
+import { CoinMark } from "@/components/desk/coin-mark";
 import { UnlocksPanel } from "@/components/desk/unlocks-panel";
 import { BacktestPanel } from "@/components/desk/backtest-panel";
 import { DepthPanel } from "@/components/desk/depth-panel";
@@ -191,19 +192,19 @@ function Home() {
     <main className="desk-grid min-h-dvh">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 md:px-6 md:py-12">
         <header className="flex flex-col gap-6">
-          <div className="flex items-center gap-2 text-xs text-subtle">
-            <Activity className="size-3.5" />
-            میز اسپات · جفت بیت‌کوین · توکنومیکس
+          <div className="flex items-center justify-between gap-3 text-xs text-subtle">
+            <div className="flex items-center gap-2">
+              <Activity className="size-3.5" />
+              <span className="num tracking-widest">ALPHA SPOT</span>
+            </div>
+            <span>میز اسپات · جفت بیت‌کوین</span>
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
-              <h1 className="text-4xl font-medium tracking-tight text-fg md:text-5xl">
-                آلفا اسپات
-              </h1>
+              <h1 className="text-4xl font-medium tracking-tight text-fg md:text-5xl">آلفا اسپات</h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
-                صد ارز اول روی جفت بیت‌کوین، نسبت MC/FDV و سه لایه ریسک سازمانی
-                سنجیده می‌شوند: کلید قطع بیت‌کوین، جریمه کلیف آنلاک، و قوانین خروج
-                و چرخش سبد.
+                هر ارز با نمادش دیده می‌شود. مدل صد دارایی اول را در برابر بیت‌کوین
+                می‌سنجد و روی نمودار انتخاب اول، بهترین نقطه خرید همان بازه را علامت می‌زند.
               </p>
             </div>
             <Button
@@ -255,6 +256,7 @@ function Home() {
         {status === "done" && result ? (
           <>
             <KillSwitchBanner kill={result.killSwitch} />
+            <SymbolTape rows={result.top} picked={result.pick.symbol} />
             <nav className="flex gap-1 overflow-x-auto rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
               {(
                 [
@@ -324,6 +326,19 @@ function Home() {
 function IdleState() {
   return (
     <div className="flex flex-col gap-6">
+      <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+        <p className="text-xs text-subtle">نمادهایی که میز در برابر بیت‌کوین می‌سنجد</p>
+        <ul className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {MAJORS.map(([symbol, name]) => (
+            <li
+              key={symbol}
+              className="min-w-40 shrink-0 rounded-lg bg-elevated px-3 py-3 shadow-[var(--shadow-border)]"
+            >
+              <CoinMark symbol={symbol} name={name} size="sm" />
+            </li>
+          ))}
+        </ul>
+      </section>
       <ul className="grid gap-3 sm:grid-cols-2">
         <IdleCard
           k="۰۱"
@@ -350,6 +365,54 @@ function IdleState() {
     </div>
   );
 }
+
+function SymbolTape({
+  rows,
+  picked,
+}: {
+  rows: AnalysisResult["top"];
+  picked: string;
+}) {
+  return (
+    <section>
+      <p className="text-xs text-subtle">ده ارز اول مدل، هر کدام با نماد</p>
+      <ul className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {rows.slice(0, 10).map((row, i) => {
+          const on = row.symbol === picked;
+          return (
+            <li
+              key={row.id}
+              className={
+                on
+                  ? "min-w-48 shrink-0 rounded-lg bg-elevated px-3 py-3 shadow-[var(--shadow-border-hover)]"
+                  : "min-w-48 shrink-0 rounded-lg bg-surface px-3 py-3 shadow-[var(--shadow-border)]"
+              }
+            >
+              <div className="mb-2 flex items-center justify-between text-xs text-subtle">
+                <span className="num">{i + 1}</span>
+                {on ? <span className="text-fg">انتخاب</span> : <span>رتبه</span>}
+              </div>
+              <CoinMark symbol={row.symbol} name={row.name} size="sm" />
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+const MAJORS: [string, string][] = [
+  ["BTC", "بیت‌کوین"],
+  ["ETH", "اتریوم"],
+  ["SOL", "سولانا"],
+  ["BNB", "بی‌ان‌بی"],
+  ["XRP", "ریپل"],
+  ["TON", "تون"],
+  ["LINK", "چین‌لینک"],
+  ["AVAX", "آوالانچ"],
+  ["SUI", "سویی"],
+  ["NEAR", "نیر"],
+];
 
 function IdleCard({ k, t, d }: { k: string; t: string; d: string }) {
   return (

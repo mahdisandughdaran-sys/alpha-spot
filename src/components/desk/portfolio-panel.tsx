@@ -1,5 +1,6 @@
 import type { AnalysisResult } from "@/lib/crypto/types";
 import { SignalButton } from "./signal-button";
+import { CoinMark } from "./coin-mark";
 import { formatScore } from "./format";
 
 export function PortfolioPanel({ result }: { result: AnalysisResult }) {
@@ -29,12 +30,9 @@ export function PortfolioPanel({ result }: { result: AnalysisResult }) {
               ) : (
                 sleeve.legs.map((leg) => (
                   <li key={leg.symbol} className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm text-fg">{leg.name}</p>
-                      <p className="num text-xs text-subtle">
-                        {leg.symbol} · #{leg.rank}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">{leg.reason}</p>
+                    <div className="min-w-0">
+                      <CoinMark symbol={leg.symbol} name={leg.name} rank={leg.rank} size="sm" />
+                      <p className="mt-2 text-xs text-muted">{leg.reason}</p>
                     </div>
                     <div className="text-end">
                       <p className="num text-sm text-fg">

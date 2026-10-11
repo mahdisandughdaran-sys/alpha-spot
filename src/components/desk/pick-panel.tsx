@@ -1,5 +1,6 @@
-import { Bitcoin, ShieldAlert, ArrowUpRight } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import type { AnalysisResult } from "@/lib/crypto/types";
+import { findBestBuyPoint } from "@/lib/crypto/buy-point";
 import {
   btcPriceLabel,
   confidenceTitle,
@@ -9,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { BtcPairChart } from "./btc-chart";
 import { ChecklistCard } from "./checklist-card";
+import { CoinMark } from "./coin-mark";
 import { FactorBars } from "./factor-bars";
 import { formatPct, formatPctPoints, formatScore, formatUsd, timeAgoFa } from "./format";
 
@@ -26,6 +28,11 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
     result.klinesTried > 0
       ? Math.round((result.klinesOk / result.universeSize) * 100)
       : 0;
+  const chartMode = pick.symbol === "BTC" ? "usd" : "pair";
+  const usdPath = pick.spotIndex;
+  const chartSeries =
+    pick.symbol === "BTC" && usdPath && usdPath.length >= 5 ? usdPath : pick.pairSeries;
+  const buy = findBestBuyPoint(chartSeries);
 
   return (
     <div className="flex flex-col gap-6">
@@ -61,33 +68,8 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
                       ? "بهترین خرید با نصف حجم"
                       : "بهترین خرید اسپات الان"}
                 </p>
-        <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              {pick.symbol === "BTC" ? (
-                <Bitcoin className="size-8 text-accent" strokeWidth={1.5} />
-              ) : (
-                <ArrowUpRight className="size-8 text-accent" strokeWidth={1.5} />
-              )}
-              <div>
-                <h2 className="text-3xl font-medium tracking-tight text-fg md:text-4xl">
-                  {pick.name}
-                </h2>
-                <p className="mt-1 text-sm text-muted">
-                  <span className="num">{pick.symbol}</span>
-                  <span className="mx-2 text-subtle">·</span>
-                  رتبه بازار
-                  <span className="num ms-1">#{pick.rank}</span>
-                  {pick.narrativeTagsFa[0] ? (
-                    <>
-                      <span className="mx-2 text-subtle">·</span>
-                      {pick.narrativeTagsFa[0]}
-                    </>
-                  ) : null}
-                </p>
-              </div>
-            </div>
-          </div>
+        <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <CoinMark symbol={pick.symbol} name={pick.name} rank={pick.rank} size="lg" />
           <div className="text-start md:text-end">
             <p className="text-xs text-subtle">امتیاز اسپات</p>
             <p className="num text-4xl font-medium tracking-tight text-fg">
@@ -96,6 +78,9 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
           </div>
         </div>
 
+        {pick.narrativeTagsFa[0] ? (
+          <p className="mt-4 text-xs text-subtle">{pick.narrativeTagsFa[0]}</p>
+        ) : null}
         <dl className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="قیمت دلار" value={`$${formatUsd(pick.priceUsd)}`} />
           <Stat label="قیمت به بیت‌کوین" value={btcPriceLabel(pick.priceBtc)} />
@@ -198,21 +183,64 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
           ) : null}
           {runnerUp ? (
             <p className="mt-4 text-xs text-subtle">
-              گزینه دوم: {runnerUp.name} ({runnerUp.symbol}) با امتیاز{" "}
-              <span className="num">{formatScore(runnerUp.score)}</span>
+              گزینه دوم: {runnerUp.name}{" "}
+              <span className="num text-fg">{runnerUp.symbol}</span>
+              {" · "}امتیاز <span className="num">{formatScore(runnerUp.score)}</span>
               {" · "}۷ روز vs BTC {formatPct(runnerUp.rs7d)}
             </p>
           ) : null}
         </section>
 
         <section className="min-w-0 overflow-hidden rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-6">
-          <h3 className="text-base font-medium text-fg">شاخص جفت بیت‌کوین · ۳۰ روز</h3>
-          <p className="mt-1 text-xs text-subtle">
-            ۱۰۰ = شروع بازه. خط چین، سطح شروع است. بالای ۱۰۰ یعنی نسبت به BTC جلو افتاده.
-          </p>
-          <div className="mt-4">
-            <BtcPairChart data={pick.pairSeries} symbol={pick.symbol} />
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-medium text-fg">
+                {chartMode === "usd" ? "قیمت دلاری بیت‌کوین · ۳۰ روز" : `جفت ${pick.symbol}/BTC · ۳۰ روز`}
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-subtle">
+                {chartMode === "usd"
+                  ? "۱۰۰ = شروع بازه. علامت BUY بهترین اصلاح این مسیر است."
+                  : "۱۰۰ = شروع بازه. بالای ۱۰۰ یعنی از بیت‌کوین جلو افتاده. BUY بهترین نقطه خرید همین ارز است."}
+              </p>
+            </div>
+            <span className="num shrink-0 rounded-sm bg-fg px-2 py-1 text-xs text-bg">
+              {pick.symbol}
+            </span>
           </div>
+          <div className="mt-4">
+            <BtcPairChart data={chartSeries} symbol={pick.symbol} buy={buy} mode={chartMode} />
+          </div>
+          {buy ? (
+            <div className="mt-4 rounded-md bg-elevated px-3 py-3">
+              <p className="text-sm text-fg">
+                {buy.flat
+                  ? "نقطه خرید متمایزی نیست"
+                  : buy.nearNow
+                    ? "الان نزدیک بهترین نقطه خرید است"
+                    : "بهترین نقطه خرید این بازه"}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">
+                {buy.flat ? (
+                  "نوسان ۳۰ روزه آن‌قدر کم است که کف قابل‌دفاعی شکل نگرفته."
+                ) : (
+                  <>
+                    روز <span className="num text-fg">{buy.day}</span>
+                    {" · "}شاخص <span className="num text-fg">{buy.value.toFixed(1)}</span>
+                    {" · "}
+                    <span className="num">{buy.pullbackPct.toFixed(1)}٪</span> زیر اوج پیش از آن
+                    {buy.recovered ? "، و بعدش قیمت برگشته" : "، هنوز برگشت محکم ندیده"}. از آن کف تا امروز{" "}
+                    <span className={`num ${buy.sincePct >= 0 ? "text-up" : "text-down"}`}>
+                      {buy.sincePct >= 0 ? "+" : ""}
+                      {buy.sincePct.toFixed(1)}٪
+                    </span>
+                    .
+                  </>
+                )}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-subtle">سری قیمت برای علامت‌گذاری نقطه خرید کافی نبود.</p>
+          )}
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
             <p className="text-muted">
               RSI ۱۴روزه:{" "}

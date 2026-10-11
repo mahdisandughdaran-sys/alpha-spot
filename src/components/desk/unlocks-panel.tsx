@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { CoinRow } from "@/lib/crypto/types";
+import { CoinMark } from "./coin-mark";
 import { formatUsd } from "./format";
 
 type Filter = "all" | "penalty" | "cliff";
@@ -101,10 +102,7 @@ export function UnlocksPanel({
               visible.map((row) => (
                 <tr key={row.id} className="border-t border-border">
                   <td className="px-4 py-3">
-                    <p className="text-fg">{row.name}</p>
-                    <p className="num text-xs text-subtle">
-                      {row.symbol} · #{row.rank}
-                    </p>
+                    <CoinMark symbol={row.symbol} name={row.name} rank={row.rank} size="sm" />
                   </td>
                   <td className="px-4 py-3 text-muted">{whenLabel(row)}</td>
                   <td className="num px-4 py-3 text-fg">
