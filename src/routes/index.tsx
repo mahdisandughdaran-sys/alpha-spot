@@ -3,14 +3,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AlertStrip } from "@/components/desk/alert-strip";
 import { HistoryPanel } from "@/components/desk/history-panel";
 import { KillSwitchBanner } from "@/components/desk/kill-switch-banner";
 import { Leaderboard } from "@/components/desk/leaderboard";
+import { LiveBadge } from "@/components/desk/live-badge";
 import { Methodology } from "@/components/desk/methodology";
 import { MonitorPanel } from "@/components/desk/monitor-panel";
 import { PickPanel } from "@/components/desk/pick-panel";
 import { PortfolioPanel } from "@/components/desk/portfolio-panel";
 import { CoinMark } from "@/components/desk/coin-mark";
+import { FlashValue } from "@/components/desk/flash-value";
+import { QuickFilters } from "@/components/desk/quick-filters";
 import { UnlocksPanel } from "@/components/desk/unlocks-panel";
 import { BacktestPanel } from "@/components/desk/backtest-panel";
 import { DepthPanel } from "@/components/desk/depth-panel";
@@ -41,6 +45,8 @@ import {
   saveOppSnapshot,
 } from "@/lib/crypto/opportunity-alerts";
 import type { AnalysisResult } from "@/lib/crypto/types";
+import { applyDeskFilter, type DeskFilter } from "@/lib/crypto/risk-view";
+import { formatUsd } from "@/components/desk/format";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -67,11 +73,48 @@ function Home() {
   const [history, setHistory] = useState<RunSummary[]>([]);
   const [watched, setWatched] = useState<string[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
+  const [live, setLive] = useState<Record<string, number>>({});
+  const [sync, setSync] = useState<"connecting" | "live" | "delayed">("connecting");
+  const [lens, setLens] = useState<DeskFilter>("all");
 
   useEffect(() => {
     setHistory(loadHistory());
     setWatched(loadWatch());
   }, []);
+
+  const quoteSymbols = useMemo(() => {
+    const base = ["BTC", "ETH", "SOL", "BNB", "XRP", "TON", "LINK", "AVAX", "SUI", "NEAR"];
+    if (!result) return base;
+    return [...new Set([result.pick.symbol, ...result.top.slice(0, 24).map((row) => row.symbol), ...base])];
+  }, [result]);
+
+  useEffect(() => {
+    let stop = false;
+    async function tick() {
+      try {
+        const rows = await quotes({ data: { symbols: quoteSymbols } });
+        if (stop) return;
+        if (!rows.length) {
+          setSync((prev) => (prev === "live" ? "delayed" : prev === "connecting" ? "delayed" : prev));
+          return;
+        }
+        setLive((prev) => {
+          const next = { ...prev };
+          for (const row of rows) next[row.symbol] = row.price;
+          return next;
+        });
+        setSync("live");
+      } catch {
+        if (!stop) setSync("delayed");
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, 12_000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [quoteSymbols, quotes]);
 
   useEffect(() => {
     if (!result) return;
@@ -286,12 +329,12 @@ function Home() {
     <main className="desk-grid min-h-dvh">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 md:px-6 md:py-12">
         <header className="flex flex-col gap-6">
-          <div className="flex items-center justify-between gap-3 text-xs text-subtle">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-subtle">
             <div className="flex items-center gap-2">
               <Activity className="size-3.5" />
               <span className="num tracking-widest">ALPHA SPOT</span>
             </div>
-            <span>میز اسپات · جفت بیت‌کوین</span>
+            <LiveBadge state={sync} />
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
@@ -323,7 +366,7 @@ function Home() {
           {flash ? <p className="text-sm text-warn">{flash}</p> : null}
         </header>
 
-        {status === "idle" ? <IdleState /> : null}
+        {status === "idle" ? <IdleState live={live} /> : null}
 
         {status === "loading" ? (
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
@@ -350,7 +393,15 @@ function Home() {
         {status === "done" && result ? (
           <>
             <KillSwitchBanner kill={result.killSwitch} />
-            <SymbolTape rows={result.top} picked={result.pick.symbol} />
+            <AlertStrip rows={result.top} kill={result.killSwitch} />
+            <QuickFilters
+              value={lens}
+              onChange={(next) => {
+                setLens(next);
+                setTab("table");
+              }}
+            />
+            <SymbolTape rows={result.top} picked={result.pick.symbol} live={live} />
             <nav className="flex gap-1 overflow-x-auto rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
               {(
                 [
@@ -382,14 +433,16 @@ function Home() {
                 </button>
               ))}
             </nav>
-            {tab === "pick" ? <PickPanel result={result} /> : null}
+            {tab === "pick" ? <PickPanel result={result} live={live} /> : null}
             {tab === "opportunity" ? <OpportunityPanel board={result.opportunities} /> : null}
             {tab === "table" ? (
               <Leaderboard
-                rows={result.top}
+                rows={applyDeskFilter(result.top, lens)}
                 picked={result.pick.symbol}
                 watched={watched}
                 onToggleWatch={(symbol) => setWatched(toggleWatch(symbol))}
+                live={live}
+                filter={lens}
               />
             ) : null}
             {tab === "unlocks" ? (
@@ -419,18 +472,22 @@ function Home() {
   );
 }
 
-function IdleState() {
+function IdleState({ live }: { live: Record<string, number> }) {
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
-        <p className="text-xs text-subtle">نمادهایی که میز در برابر بیت‌کوین می‌سنجد</p>
+      <section className="rounded-xl bg-surface p-5">
+        <p className="text-xs text-subtle">نمادهایی که میز در برابر بیت‌کوین می‌سنجد · قیمت لحظه‌ای</p>
         <ul className="mt-4 flex gap-2 overflow-x-auto pb-1">
           {MAJORS.map(([symbol, name]) => (
-            <li
-              key={symbol}
-              className="min-w-40 shrink-0 rounded-lg bg-elevated px-3 py-3 shadow-[var(--shadow-border)]"
-            >
+            <li key={symbol} className="min-w-40 shrink-0 rounded-lg bg-elevated px-3 py-3">
               <CoinMark symbol={symbol} name={name} size="sm" />
+              <p className="mt-2 text-xs text-subtle">
+                {live[symbol] != null ? (
+                  <FlashValue id={`idle:${symbol}`} value={live[symbol]} format={(n) => `$${formatUsd(n)}`} className="text-fg" />
+                ) : (
+                  <span className="num">—</span>
+                )}
+              </p>
             </li>
           ))}
         </ul>
@@ -465,9 +522,11 @@ function IdleState() {
 function SymbolTape({
   rows,
   picked,
+  live,
 }: {
   rows: AnalysisResult["top"];
   picked: string;
+  live: Record<string, number>;
 }) {
   return (
     <section>
@@ -475,13 +534,14 @@ function SymbolTape({
       <ul className="mt-3 flex gap-2 overflow-x-auto pb-1">
         {rows.slice(0, 10).map((row, i) => {
           const on = row.symbol === picked;
+          const price = live[row.symbol] ?? row.priceUsd;
           return (
             <li
               key={row.id}
               className={
                 on
-                  ? "min-w-48 shrink-0 rounded-lg bg-elevated px-3 py-3 shadow-[var(--shadow-border-hover)]"
-                  : "min-w-48 shrink-0 rounded-lg bg-surface px-3 py-3 shadow-[var(--shadow-border)]"
+                  ? "min-w-48 shrink-0 rounded-lg bg-elevated px-3 py-3"
+                  : "min-w-48 shrink-0 rounded-lg bg-surface px-3 py-3"
               }
             >
               <div className="mb-2 flex items-center justify-between text-xs text-subtle">
@@ -489,6 +549,9 @@ function SymbolTape({
                 {on ? <span className="text-fg">انتخاب</span> : <span>رتبه</span>}
               </div>
               <CoinMark symbol={row.symbol} name={row.name} size="sm" />
+              <p className="mt-2">
+                <FlashValue id={`tape:${row.symbol}`} value={price} format={(n) => `$${formatUsd(n)}`} className="text-sm text-fg" />
+              </p>
             </li>
           );
         })}

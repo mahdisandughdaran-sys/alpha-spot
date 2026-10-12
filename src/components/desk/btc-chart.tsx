@@ -60,20 +60,29 @@ export function BtcPairChart({
             />
           ) : null}
           <Tooltip
-            contentStyle={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 8,
-              fontSize: 12,
-              color: "var(--color-fg)",
-            }}
-            formatter={(value, _name, item) => {
-              const n = typeof value === "number" ? value : Number(value);
-              const day = Number(item?.payload?.t);
+            cursor={{ stroke: "var(--color-border-strong)" }}
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const n = Number(payload[0]?.value);
+              if (!Number.isFinite(n)) return null;
+              const day = Number(label);
+              const delta = n - 100;
               const tag = marked && day === marked.index ? " · نقطه خرید" : "";
-              return [`${n.toFixed(2)}${tag}`, unit];
+              return (
+                <div className="glass-pop rounded-lg px-3 py-2">
+                  <p className="text-xs text-subtle">روز {day + 1}</p>
+                  <p className="num mt-1 text-sm text-fg">
+                    {n.toFixed(2)}
+                    {tag}
+                  </p>
+                  <p className={`num text-xs ${delta >= 0 ? "text-up" : "text-down"}`}>
+                    {delta >= 0 ? "+" : ""}
+                    {delta.toFixed(2)} از شروع بازه
+                  </p>
+                  <p className="mt-1 text-xs text-muted">{unit}</p>
+                </div>
+              );
             }}
-            labelFormatter={(label) => `روز ${Number(label) + 1}`}
           />
           <Area
             type="monotone"

@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type { CoinRow } from "@/lib/crypto/types";
+import { unlockExplain } from "@/lib/crypto/risk-view";
 import { CoinMark } from "./coin-mark";
+import { ExplainTip } from "./explain-tip";
 import { formatUsd } from "./format";
 
 type Filter = "all" | "penalty" | "cliff";
@@ -110,13 +112,17 @@ export function UnlocksPanel({
                   </td>
                   <td className="px-4 py-3 text-muted">{row.unlockCliff ? "بله" : "خیر"}</td>
                   <td className="px-4 py-3">
-                    {row.highDilution ? (
-                      <span className="inline-flex rounded-full bg-down-dim px-2 py-1 text-xs text-down">
-                        High Dilution · <span className="num ms-1">-{row.unlockPenalty}</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-subtle">بدون جریمه</span>
-                    )}
+                    <ExplainTip title={`جریمه آنلاک ${row.symbol}`} body={unlockExplain(row)}>
+                      {row.highDilution ? (
+                        <span className="inline-flex rounded-full bg-down-dim px-2 py-1 text-xs text-down">
+                          High Dilution · <span className="num ms-1">-{row.unlockPenalty}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-subtle">
+                          {row.unlockPenalty > 0 ? `جریمه ${row.unlockPenalty}` : "بدون جریمه"}
+                        </span>
+                      )}
+                    </ExplainTip>
                   </td>
                   <td className="num px-4 py-3 text-muted">${formatUsd(row.volume24h)}</td>
                 </tr>

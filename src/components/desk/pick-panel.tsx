@@ -12,7 +12,9 @@ import { BtcPairChart } from "./btc-chart";
 import { ChecklistCard } from "./checklist-card";
 import { CoinMark } from "./coin-mark";
 import { FactorBars } from "./factor-bars";
+import { FlashValue } from "./flash-value";
 import { formatPct, formatPctPoints, formatScore, formatUsd, timeAgoFa } from "./format";
+import { RiskBreakdown } from "./risk-breakdown";
 
 function toneFor(n: number): "up" | "down" | "neutral" {
   if (n > 0.001) return "up";
@@ -20,7 +22,13 @@ function toneFor(n: number): "up" | "down" | "neutral" {
   return "neutral";
 }
 
-export function PickPanel({ result }: { result: AnalysisResult }) {
+export function PickPanel({
+  result,
+  live,
+}: {
+  result: AnalysisResult;
+  live?: Record<string, number>;
+}) {
   const { pick, runnerUp } = result;
   const confTone =
     result.confidence === "high" ? "up" : result.confidence === "low" ? "down" : "neutral";
@@ -33,6 +41,7 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
   const chartSeries =
     pick.symbol === "BTC" && usdPath && usdPath.length >= 5 ? usdPath : pick.pairSeries;
   const buy = findBestBuyPoint(chartSeries);
+  const livePrice = live?.[pick.symbol] ?? pick.priceUsd;
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,9 +81,12 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
           <CoinMark symbol={pick.symbol} name={pick.name} rank={pick.rank} size="lg" />
           <div className="text-start md:text-end">
             <p className="text-xs text-subtle">امتیاز اسپات</p>
-            <p className="num text-4xl font-medium tracking-tight text-fg">
-              {formatScore(pick.score)}
-            </p>
+            <FlashValue
+              id={`score:${pick.symbol}`}
+              value={pick.score}
+              format={formatScore}
+              className="text-4xl font-medium tracking-tight text-fg"
+            />
           </div>
         </div>
 
@@ -82,7 +94,7 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
           <p className="mt-4 text-xs text-subtle">{pick.narrativeTagsFa[0]}</p>
         ) : null}
         <dl className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="قیمت دلار" value={`$${formatUsd(pick.priceUsd)}`} />
+          <Stat label="قیمت دلار" value={`$${formatUsd(livePrice)}`} liveId={`px:${pick.symbol}`} liveValue={livePrice} />
           <Stat label="قیمت به بیت‌کوین" value={btcPriceLabel(pick.priceBtc)} />
           <Stat
             label="۷ روز vs BTC"
@@ -152,6 +164,8 @@ export function PickPanel({ result }: { result: AnalysisResult }) {
           </p>
         ) : null}
       </section>
+
+      <RiskBreakdown row={pick} />
 
       <ChecklistCard items={result.checklist} />
 
@@ -273,17 +287,27 @@ function Stat({
   label,
   value,
   tone = "neutral",
+  liveId,
+  liveValue,
 }: {
   label: string;
   value: string;
   tone?: "up" | "down" | "neutral";
+  liveId?: string;
+  liveValue?: number;
 }) {
   const color =
     tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-fg";
   return (
     <div className="rounded-md bg-elevated px-3 py-3">
       <dt className="text-xs text-subtle">{label}</dt>
-      <dd className={`num mt-1 text-sm md:text-base ${color}`}>{value}</dd>
+      <dd className={`mt-1 text-sm md:text-base ${color}`}>
+        {liveId != null && liveValue != null ? (
+          <FlashValue id={liveId} value={liveValue} format={(n) => `$${formatUsd(n)}`} className={color} />
+        ) : (
+          <span className="num">{value}</span>
+        )}
+      </dd>
     </div>
   );
 }
