@@ -21,6 +21,7 @@ import { DepthPanel } from "@/components/desk/depth-panel";
 import { ExecutePanel } from "@/components/desk/execute-panel";
 import { VenuePanel } from "@/components/desk/venue-panel";
 import { OpportunityPanel } from "@/components/desk/opportunity-panel";
+import { ConfluencePanel } from "@/components/desk/confluence-panel";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
 import {
   hasSeen,
@@ -58,7 +59,7 @@ const STAGES = [
   "امتیاز، تعلیق سیگنال و پرتفوی",
 ];
 
-type Tab = "pick" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
+type Tab = "pick" | "flow" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
 
 function Home() {
   const run = useServerFn(runSpotAnalysis);
@@ -76,6 +77,7 @@ function Home() {
   const [live, setLive] = useState<Record<string, number>>({});
   const [sync, setSync] = useState<"connecting" | "live" | "delayed">("connecting");
   const [lens, setLens] = useState<DeskFilter>("all");
+  const [flowOnly, setFlowOnly] = useState(false);
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -341,15 +343,27 @@ function Home() {
               <h1 className="text-4xl font-medium tracking-tight text-fg md:text-5xl">آلفا اسپات</h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
                 هر ارز با نمادش دیده می‌شود. مدل صد دارایی اول را در برابر بیت‌کوین
-                می‌سنجد، و جدا از آن فرصت‌هایی را که هنوز آماده نیستند ولی محدوده و شرط ابطال دارند زیر نظر می‌گیرد.
+                می‌سنجد، و میز همگرایی جریان حجم، نقشه لیکوییدیشن و حجم مجاز خرید را روی همان نماد حساب می‌کند.
               </p>
             </div>
-            <Button
-              size="lg"
-              onClick={onAnalyze}
-              disabled={status === "loading"}
-              className="h-12 min-w-52 shrink-0"
-            >
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => {
+                  setFlowOnly(true);
+                  setTab("flow");
+                }}
+                className="h-12 min-w-44"
+              >
+                همگرایی حجم
+              </Button>
+              <Button
+                size="lg"
+                onClick={onAnalyze}
+                disabled={status === "loading"}
+                className="h-12 min-w-52"
+              >
               {status === "loading" ? (
                 <>
                   <LoaderCircle className="size-4 animate-spin" />
@@ -361,12 +375,22 @@ function Home() {
                 "تحلیل ۱۰۰ ارز برتر"
               )}
             </Button>
+            </div>
           </div>
           {headerMeta ? <p className="text-xs text-subtle">{headerMeta}</p> : null}
           {flash ? <p className="text-sm text-warn">{flash}</p> : null}
         </header>
 
-        {status === "idle" ? <IdleState live={live} /> : null}
+        {status === "idle" && flowOnly ? (
+          <div className="flex flex-col gap-4">
+            <button type="button" onClick={() => setFlowOnly(false)} className="self-start text-sm text-muted">
+              بازگشت به معرفی میز
+            </button>
+            <ConfluencePanel defaultSymbol="BTC" />
+          </div>
+        ) : null}
+
+        {status === "idle" && !flowOnly ? <IdleState live={live} /> : null}
 
         {status === "loading" ? (
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
@@ -406,6 +430,7 @@ function Home() {
               {(
                 [
                   ["pick", "انتخاب"],
+                  ["flow", "همگرایی"],
                   ["opportunity", "فرصت‌ها"],
                   ["table", "رتبه‌ها"],
                   ["unlocks", "آنلاک"],
@@ -434,6 +459,7 @@ function Home() {
               ))}
             </nav>
             {tab === "pick" ? <PickPanel result={result} live={live} /> : null}
+            {tab === "flow" ? <ConfluencePanel key={result.pick.symbol} defaultSymbol={result.pick.symbol} /> : null}
             {tab === "opportunity" ? <OpportunityPanel board={result.opportunities} /> : null}
             {tab === "table" ? (
               <Leaderboard

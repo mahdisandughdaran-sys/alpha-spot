@@ -74,6 +74,7 @@ tail -f .dev-server.log
 6. Open **رتبه‌ها** for the top 12 scores, or **روش** for the weights.
 7. Tap **تحلیل دوباره** to refresh. Full results are cached for two minutes. A lighter price check, about every three minutes, only warns when a saved zone is near, touched, or preliminarily broken.
 8. In **فرصت‌ها**, run **بک‌تست فرصت**. It keeps a fee of 10 bps and slippage of 8 bps per side, and it will say when there are not enough confirmed trades. Past results are not future results.
+9. From the idle screen, **همگرایی حجم** reads one coin without waiting for the full universe: taker-buy flow, an estimated liquidation map (unswept 5x–100x pools), and `position = (capital × risk%) / stop%`.
 
 This is not investment advice.
 
