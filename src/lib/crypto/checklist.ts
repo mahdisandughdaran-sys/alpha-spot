@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n/lex";
 import type {
   AnalysisResult,
   BookCheck,
@@ -43,80 +44,95 @@ export function buildChecklist(
   const items: CheckItem[] = [
     {
       key: "mcfdv",
-      label: "نسبت MC / FDV",
-      desired: "ترجیحاً بالای ۰٫۷",
+      label: msg("نسبت MC / FDV", "MC / FDV ratio"),
+      desired: msg("ترجیحاً بالای ۰٫۷", "Preferably above 0.7"),
       ok: mcOk,
       detail:
         pick.mcFdv == null
-          ? "سقف عرضه در داده نبود."
-          : `MC/FDV ${(pick.mcFdv * 100).toFixed(0)}٪`,
+          ? msg("سقف عرضه در داده نبود.", "The supply cap was missing from the data.")
+          : msg(
+              `MC/FDV ${(pick.mcFdv * 100).toFixed(0)}٪`,
+              `MC/FDV ${(pick.mcFdv * 100).toFixed(0)}%`,
+            ),
     },
     {
       key: "pair",
-      label: "نمودار ALT/BTC",
-      desired: "روند صعودی یا شکست مقاومت",
+      label: msg("نمودار ALT/BTC", "ALT/BTC chart"),
+      desired: msg("روند صعودی یا شکست مقاومت", "Uptrend or a resistance break"),
       ok: pairOk,
       detail:
         pick.symbol === "BTC"
-          ? "خود بیت‌کوین معیار است."
+          ? msg("خود بیت‌کوین معیار است.", "Bitcoin itself is the benchmark.")
           : pick.weeklyStructure === "bull"
-            ? "ساختار هفتگی جفت/دلار صعودی است."
+            ? msg("ساختار هفتگی جفت/دلار صعودی است.", "Weekly pair/dollar structure is bullish.")
             : pick.rs7d > 0
-              ? "قدرت نسبی ۷ روزه مثبت است."
-              : "جفت بیت‌کوین هنوز شکست معتبر ندارد.",
+              ? msg("قدرت نسبی ۷ روزه مثبت است.", "7-day relative strength is positive.")
+              : msg("جفت بیت‌کوین هنوز شکست معتبر ندارد.", "The Bitcoin pair still has no valid breakout."),
     },
     {
       key: "dom",
-      label: "دامیننس بیت‌کوین",
-      desired: "کاهشی یا برخورد به مقاومت",
+      label: msg("دامیننس بیت‌کوین", "Bitcoin dominance"),
+      desired: msg("کاهشی یا برخورد به مقاومت", "Falling, or a test of resistance"),
       ok: domOk,
-      detail: `دامیننس ${ctx.btcDominance.toFixed(1)}٪ · رژیم ${ctx.regime}`,
+      detail: msg(
+        `دامیننس ${ctx.btcDominance.toFixed(1)}٪ · رژیم ${ctx.regime}`,
+        `Dominance ${ctx.btcDominance.toFixed(1)}% · regime ${ctx.regime}`,
+      ),
     },
     {
       key: "liq",
-      label: "حجم و عمق نقدشوندگی",
-      desired: "حجم روزانه بالای ۲٪ مارکت‌کپ",
+      label: msg("حجم و عمق نقدشوندگی", "Volume and liquidity depth"),
+      desired: msg("حجم روزانه بالای ۲٪ مارکت‌کپ", "Daily volume above 2% of market cap"),
       ok: liqOk,
-      detail: `گردش ${(pick.turnover * 100).toFixed(2)}٪ از مارکت‌کپ`,
+      detail: msg(
+        `گردش ${(pick.turnover * 100).toFixed(2)}٪ از مارکت‌کپ`,
+        `Turnover ${(pick.turnover * 100).toFixed(2)}% of market cap`,
+      ),
     },
     {
       key: "ema",
-      label: "وضعیت تکنیکال دلاری",
-      desired: "بالای EMA ۲۰۰ روزانه / فاز انباشت",
+      label: msg("وضعیت تکنیکال دلاری", "Dollar technical state"),
+      desired: msg("بالای EMA ۲۰۰ روزانه / فاز انباشت", "Above the daily 200 EMA / accumulation phase"),
       ok: emaOk,
       detail:
         emaOk === true
-          ? "قیمت بالای میانگین نمایی ۲۰۰ روزه است."
+          ? msg("قیمت بالای میانگین نمایی ۲۰۰ روزه است.", "Price is above the 200-day exponential moving average.")
           : emaOk === false
-            ? "زیر EMA ۲۰۰ — روند دلاری هنوز فرسایشی است."
-            : "کندل ۲۰۰ روزه کامل نبود.",
+            ? msg("زیر EMA ۲۰۰ — روند دلاری هنوز فرسایشی است.", "Below the 200 EMA — the dollar trend is still grinding lower.")
+            : msg("کندل ۲۰۰ روزه کامل نبود.", "The 200-day candle history was incomplete."),
     },
     {
       key: "unlock",
-      label: "آزادسازی ۳۰ روز",
-      desired: "کمتر از ۳٪ عرضه کل",
+      label: msg("آزادسازی ۳۰ روز", "30-day unlock"),
+      desired: msg("کمتر از ۳٪ عرضه کل", "Under 3% of total supply"),
       ok: pick.symbol === "BTC" ? true : pick.unlockPct30d == null ? null : !pick.highDilution,
       detail:
         pick.unlockPct30d == null
-          ? "تقویم آزادسازی برای این نماد نبود."
+          ? msg("تقویم آزادسازی برای این نماد نبود.", "There was no unlock calendar for this symbol.")
           : pick.highDilution
-            ? `${pick.unlockPct30d.toFixed(2)}٪ عرضه در ۳۰ روز · جریمه ${pick.unlockPenalty} امتیاز · High Dilution Risk`
-            : `${pick.unlockPct30d.toFixed(2)}٪ عرضه در ۳۰ روز · بدون جریمه`,
+            ? msg(
+                `${pick.unlockPct30d.toFixed(2)}٪ عرضه در ۳۰ روز · جریمه ${pick.unlockPenalty} امتیاز · High Dilution Risk`,
+                `${pick.unlockPct30d.toFixed(2)}% of supply in 30 days · a ${pick.unlockPenalty}-point penalty · High Dilution Risk`,
+              )
+            : msg(
+                `${pick.unlockPct30d.toFixed(2)}٪ عرضه در ۳۰ روز · بدون جریمه`,
+                `${pick.unlockPct30d.toFixed(2)}% of supply in 30 days · no penalty`,
+              ),
     },
     {
       key: "kill",
-      label: "کلید قطع بیت‌کوین",
-      desired: "بالای EMA ۲۰۰ و هفتگی غیرنزولی شدید",
+      label: msg("کلید قطع بیت‌کوین", "Bitcoin kill switch"),
+      desired: msg("بالای EMA ۲۰۰ و هفتگی غیرنزولی شدید", "Above the 200 EMA and weekly not severely bearish"),
       ok: ctx.kill ? ctx.kill.status === "NORMAL" : null,
-      detail: ctx.kill?.note ?? "فیلتر کلان هنوز محاسبه نشده است.",
+      detail: ctx.kill?.note ?? msg("فیلتر کلان هنوز محاسبه نشده است.", "The macro filter has not been computed yet."),
     },
   ];
 
   if (ctx.book && pick.symbol !== "BTC") {
     items.push({
       key: "book",
-      label: "دفتر سفارش و فاندینگ",
-      desired: "اسلیپیج زیر ۳۵bps و فاندینگ سالانه زیر ۳۰٪",
+      label: msg("دفتر سفارش و فاندینگ", "Order book and funding"),
+      desired: msg("اسلیپیج زیر ۳۵bps و فاندینگ سالانه زیر ۳۰٪", "Slippage under 35 bps and annualized funding under 30%"),
       ok: ctx.book.gate === "pass" ? true : ctx.book.gate === "unknown" ? null : false,
       detail: ctx.book.note,
     });
@@ -148,24 +164,36 @@ export function dominanceBiasOf(
   if (dominance >= 55 && medianRs7 < 0) {
     return {
       bias: "rising",
-      note: `دامیننس BTC ${dominance.toFixed(1)}٪ و میانه آلت‌ها منفی است — سرمایه به بیت‌کوین جذب می‌شود.`,
+      note: msg(
+        `دامیننس BTC ${dominance.toFixed(1)}٪ و میانه آلت‌ها منفی است — سرمایه به بیت‌کوین جذب می‌شود.`,
+        `BTC dominance is ${dominance.toFixed(1)}% and the median alt is negative — capital is being pulled into Bitcoin.`,
+      ),
     };
   }
   if (dominance >= 54.5 && Math.abs(btcPct7d) < 0.05) {
     return {
       bias: "resistance",
-      note: `دامیننس ${dominance.toFixed(1)}٪ نزدیک مقاومت تاریخی است؛ اگر بشکند آلت‌ها جا می‌مانند.`,
+      note: msg(
+        `دامیننس ${dominance.toFixed(1)}٪ نزدیک مقاومت تاریخی است؛ اگر بشکند آلت‌ها جا می‌مانند.`,
+        `Dominance at ${dominance.toFixed(1)}% is near historical resistance; if it breaks, alts get left behind.`,
+      ),
     };
   }
   if (dominance < 52 && medianRs7 > 0) {
     return {
       bias: "falling",
-      note: `دامیننس ${dominance.toFixed(1)}٪ در حال کاهش است — فضای آلت‌سیزن بازتر شده.`,
+      note: msg(
+        `دامیننس ${dominance.toFixed(1)}٪ در حال کاهش است — فضای آلت‌سیزن بازتر شده.`,
+        `Dominance at ${dominance.toFixed(1)}% is falling — the alt-season window is more open.`,
+      ),
     };
   }
   return {
     bias: "neutral",
-    note: `دامیننس ${dominance.toFixed(1)}٪ در ناحیه میانی است.`,
+    note: msg(
+      `دامیننس ${dominance.toFixed(1)}٪ در ناحیه میانی است.`,
+      `Dominance at ${dominance.toFixed(1)}% is in the middle zone.`,
+    ),
   };
 }
 

@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n/lex";
 import type {
   AnalysisResult,
   CoinRow,

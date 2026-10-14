@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildRebalancePlan } from "@/lib/crypto/rebalance";
 import type { AnalysisResult, DeskAction, HoldingInput } from "@/lib/crypto/types";
+import { useI18n } from "@/lib/i18n/locale";
 import { formatPct, formatScore, formatUsd } from "./format";
 
 const KEY = "alpha-spot-book-v1";
@@ -39,7 +40,14 @@ const ACTION_FA: Record<DeskAction, string> = {
   REBALANCE: "چرخش",
 };
 
+const ACTION_EN: Record<DeskAction, string> = {
+  HOLD: "Hold",
+  SELL: "Exit",
+  REBALANCE: "Rotate",
+};
+
 export function MonitorPanel({ result }: { result: AnalysisResult }) {
+  const { tr } = useI18n();
   const [book, setBook] = useState<HoldingInput[]>([]);
   const [symbol, setSymbol] = useState("ETH");
   const [entry, setEntry] = useState("");
@@ -88,13 +96,14 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
   return (
     <section className="flex flex-col gap-4">
       <div>
-        <h3 className="text-base font-medium text-fg">پایش سبد و چرخش</h3>
+        <h3 className="text-base font-medium text-fg">{tr("پایش سبد و چرخش", "Book watch and rotation")}</h3>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
-          پوزیشن‌های اسپات خودتان را وارد کنید. اگر حمایت هفتگی ALT/BTC بشکند یا
-          امتیاز زیر ۶۰ بیاید، سیگنال خروج و چرخش به برترین گزینه واجد شرایط
-          صادر می‌شود. با کلید قطع، مقصد چرخش بیت‌کوین است.
+          {tr(
+            "پوزیشن‌های اسپات خودتان را وارد کنید. اگر حمایت هفتگی ALT/BTC بشکند یا امتیاز زیر ۶۰ بیاید، سیگنال خروج و چرخش به برترین گزینه واجد شرایط صادر می‌شود. با کلید قطع، مقصد چرخش بیت‌کوین است.",
+            "Enter your own spot positions. If weekly ALT/BTC support breaks or the score falls under 60, the desk signals an exit and a rotation into the best qualified name. With the kill-switch on, the rotation target is Bitcoin.",
+          )}
         </p>
-        <p className="mt-2 text-xs text-subtle">{plan.note}</p>
+        <p className="mt-2 text-xs text-subtle">{tr(plan.note)}</p>
       </div>
 
       <form
@@ -105,7 +114,7 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
         }}
       >
         <label className="flex flex-col gap-1 text-xs text-subtle">
-          نماد
+          {tr("نماد", "Ticker")}
           <select
             value={symbol}
             onChange={(event) => setSymbol(event.target.value)}
@@ -119,7 +128,7 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-subtle">
-          قیمت ورود (دلار)
+          {tr("قیمت ورود (دلار)", "Entry price (USD)")}
           <input
             inputMode="decimal"
             value={entry}
@@ -129,7 +138,7 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-subtle">
-          اندازه (دلار)
+          {tr("اندازه (دلار)", "Size (USD)")}
           <input
             inputMode="decimal"
             value={size}
@@ -140,20 +149,20 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
         </label>
         <div className="flex items-end">
           <Button type="submit" className="w-full">
-            افزودن پوزیشن
+            {tr("افزودن پوزیشن", "Add position")}
           </Button>
         </div>
       </form>
 
       <div className="grid grid-cols-3 gap-2">
-        <Mini k="نگهداری پیشنهادی" v={`$${formatUsd(plan.holdUsd)}`} />
-        <Mini k="آماده چرخش" v={`$${formatUsd(plan.rotateUsd)}`} />
-        <Mini k="خروج نقد" v={`$${formatUsd(plan.sellUsd)}`} />
+        <Mini k={tr("نگهداری پیشنهادی", "Suggested hold")} v={`$${formatUsd(plan.holdUsd)}`} />
+        <Mini k={tr("آماده چرخش", "Ready to rotate")} v={`$${formatUsd(plan.rotateUsd)}`} />
+        <Mini k={tr("خروج نقد", "Cash exit")} v={`$${formatUsd(plan.sellUsd)}`} />
       </div>
 
       {plan.destinations.length > 0 ? (
         <div className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
-          <p className="text-sm text-fg">مقصد چرخش</p>
+          <p className="text-sm text-fg">{tr("مقصد چرخش", "Rotation target")}</p>
           <ul className="mt-3 flex flex-col gap-2">
             {plan.destinations.map((dest) => (
               <li key={dest.symbol} className="flex items-center justify-between gap-3">
@@ -161,7 +170,7 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
                   <p className="text-sm text-fg">
                     {dest.name} <span className="num text-subtle">{dest.symbol}</span>
                   </p>
-                  <p className="text-xs text-muted">{dest.reason}</p>
+                  <p className="text-xs text-muted">{tr(dest.reason)}</p>
                 </div>
                 <div className="text-end">
                   <p className="num text-sm text-fg">${formatUsd(dest.usd)}</p>
@@ -175,8 +184,10 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
 
       {plan.rows.length === 0 ? (
         <p className="rounded-xl bg-surface p-5 text-sm text-muted shadow-[var(--shadow-border)]">
-          هنوز پوزیشنی ثبت نشده. یک نماد از صد ارز اول، قیمت ورود و اندازه دلاری
-          را اضافه کنید تا Hold / Sell / Rebalance زنده شود.
+          {tr(
+            "هنوز پوزیشنی ثبت نشده. یک نماد از صد ارز اول، قیمت ورود و اندازه دلاری را اضافه کنید تا Hold / Sell / Rebalance زنده شود.",
+            "No position on the book yet. Add a ticker from the top 100, an entry price, and a dollar size so Hold / Sell / Rebalance goes live.",
+          )}
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
@@ -198,41 +209,41 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
                     <p className="num text-xs text-subtle">{row.symbol}</p>
                   </div>
                   <span className={`rounded-full px-2.5 py-1 text-xs ${tone}`}>
-                    {ACTION_FA[row.action]}
+                    {tr(ACTION_FA[row.action], ACTION_EN[row.action])}
                     {row.action === "REBALANCE" && row.targetSymbol
                       ? ` → ${row.targetSymbol}`
                       : ""}
                   </span>
                 </div>
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
-                  <Field k="امتیاز" v={row.score == null ? "—" : formatScore(row.score)} />
+                  <Field k={tr("امتیاز", "Score")} v={row.score == null ? "—" : formatScore(row.score)} />
                   <Field
-                    k="بازدهی"
+                    k={tr("بازدهی", "P&L")}
                     v={row.pnlPct == null ? "—" : formatPct(row.pnlPct)}
                   />
                   <Field
-                    k="ALT/BTC هفتگی"
+                    k={tr("ALT/BTC هفتگی", "Weekly ALT/BTC")}
                     v={
                       row.symbol === "BTC"
-                        ? "معیار"
+                        ? tr("معیار", "Benchmark")
                         : row.pairSupportBroken
-                          ? "شکست حمایت"
+                          ? tr("شکست حمایت", "Support broken")
                           : row.pairWeekly === "bull"
-                            ? "صعودی"
+                            ? tr("صعودی", "Bullish")
                             : row.pairWeekly === "bear"
-                              ? "نزولی"
-                              : "خنثی / نامشخص"
+                              ? tr("نزولی", "Bearish")
+                              : tr("خنثی / نامشخص", "Flat / unknown")
                     }
                   />
-                  <Field k="حجم پیشنهادی" v={`$${formatUsd(row.suggestedSizeUsd)}`} />
+                  <Field k={tr("حجم پیشنهادی", "Suggested size")} v={`$${formatUsd(row.suggestedSizeUsd)}`} />
                 </dl>
-                <p className="mt-3 text-xs leading-relaxed text-muted">{row.reason}</p>
+                <p className="mt-3 text-xs leading-relaxed text-muted">{tr(row.reason)}</p>
                 <button
                   type="button"
                   onClick={() => remove(row.symbol)}
                   className="mt-3 h-11 text-xs text-subtle hover:text-fg"
                 >
-                  حذف از سبد
+                  {tr("حذف از سبد", "Remove from book")}
                 </button>
               </li>
             );
@@ -244,19 +255,21 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
 }
 
 function Mini({ k, v }: { k: string; v: string }) {
+  const { tr } = useI18n();
   return (
     <div className="rounded-xl bg-surface px-3 py-3 shadow-[var(--shadow-border)]">
-      <p className="text-xs text-subtle">{k}</p>
-      <p className="num mt-1 text-sm text-fg">{v}</p>
+      <p className="text-xs text-subtle">{tr(k)}</p>
+      <p className="num mt-1 text-sm text-fg">{tr(v)}</p>
     </div>
   );
 }
 
 function Field({ k, v }: { k: string; v: string }) {
+  const { tr } = useI18n();
   return (
     <div>
-      <dt className="text-subtle">{k}</dt>
-      <dd className="num mt-1 text-fg">{v}</dd>
+      <dt className="text-subtle">{tr(k)}</dt>
+      <dd className="num mt-1 text-fg">{tr(v)}</dd>
     </div>
   );
 }

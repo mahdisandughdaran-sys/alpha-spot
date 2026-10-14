@@ -1,5 +1,6 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
+import { LocaleProvider } from "@/lib/i18n/locale";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
@@ -14,7 +15,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "تحلیل اسپات: رتبه در برابر بیت‌کوین، جریان حجم، نقشه لیکوییدیشن و حجم پوزیشن.",
+          "Spot desk in Persian and English: rank assets against Bitcoin, read volume confluence, and size a single spot buy.",
       },
       { name: "theme-color", content: "#09090B" },
     ],
@@ -33,7 +34,9 @@ export const Route = createRootRoute({
       <body>
         <PreviewHostBridge />
         <AuthProvider>
-          <Outlet />
+          <LocaleProvider>
+            <Outlet />
+          </LocaleProvider>
         </AuthProvider>
         <Scripts />
       </body>

@@ -1,4 +1,5 @@
 import type { Opportunity, OpportunityStatus } from "./opportunity.ts";
+import { msg } from "@/lib/i18n/lex";
 
 export type OpportunityAlertKind =
   | "approaching"
@@ -134,35 +135,45 @@ export function alertsFromScan(
     if (row.status === "approaching" && old?.status !== "approaching") {
       push(
         "approaching",
-        `${row.symbol} به محدوده نزدیک شده`,
-        `${row.summary} نزدیک شدن به‌تنهایی تأیید خرید نیست.`,
+        msg(`${row.symbol} به محدوده نزدیک شده`, `${row.symbol} has approached the zone`),
+        msg(
+          `${row.summary} نزدیک شدن به‌تنهایی تأیید خرید نیست.`,
+          `${row.summary} Approaching the zone alone is not a buy confirmation.`,
+        ),
       );
     }
     if ((row.status === "in-zone" || row.status === "confirmed" || row.status === "actionable") && old && old.status !== "in-zone" && old.status !== "confirmed" && old.status !== "actionable") {
       push(
         "entered",
-        `${row.symbol} وارد محدوده شده`,
-        "قیمت به باند رسیده است. تا تأیید RSI یا MACD این یک ورود قطعی نیست.",
+        msg(`${row.symbol} وارد محدوده شده`, `${row.symbol} has entered the zone`),
+        msg(
+          "قیمت به باند رسیده است. تا تأیید RSI یا MACD این یک ورود قطعی نیست.",
+          "Price has reached the band. Until RSI or MACD confirms, this is not a definite entry.",
+        ),
       );
     }
     if ((row.status === "confirmed" || row.status === "actionable") && old?.status !== "confirmed" && old?.status !== "actionable") {
-      push("confirmed", `${row.symbol} شرایط تأیید را گرفته`, row.summary);
+      push("confirmed", msg(`${row.symbol} شرایط تأیید را گرفته`, `${row.symbol} has met the confirmation conditions`), row.summary);
     }
     if (row.status === "invalidated" && old?.status !== "invalidated") {
-      push("invalidated", `سناریوی ${row.symbol} نامعتبر شد`, row.summary);
+      push("invalidated", msg(`سناریوی ${row.symbol} نامعتبر شد`, `The ${row.symbol} scenario was invalidated`), row.summary);
     }
     if (row.parts.some((part) => part.key === "volume" && part.score <= 30) && !old?.volumeZNote) {
       push(
         "shock",
-        `حجم یا فشار غیرعادی در ${row.symbol}`,
-        row.parts.find((part) => part.key === "volume")?.note ?? "حجم از حالت عادی خارج شده است.",
+        msg(`حجم یا فشار غیرعادی در ${row.symbol}`, `Unusual volume or pressure in ${row.symbol}`),
+        row.parts.find((part) => part.key === "volume")?.note ??
+          msg("حجم از حالت عادی خارج شده است.", "Volume has left its normal range."),
       );
     }
     if (old && Math.abs(row.score - old.score) >= 8) {
       push(
         "score-shift",
-        `امتیاز فرصت ${row.symbol} تغییر کرد`,
-        `از ${old.score.toFixed(1)} به ${row.score.toFixed(1)}. دلیل را در جزئیات عوامل ببینید، نه در درصد افت قیمت.`,
+        msg(`امتیاز فرصت ${row.symbol} تغییر کرد`, `The ${row.symbol} opportunity score changed`),
+        msg(
+          `از ${old.score.toFixed(1)} به ${row.score.toFixed(1)}. دلیل را در جزئیات عوامل ببینید، نه در درصد افت قیمت.`,
+          `From ${old.score.toFixed(1)} to ${row.score.toFixed(1)}. See the factor detail, not the percent price drop.`,
+        ),
       );
     }
   }
@@ -188,8 +199,11 @@ export function alertsFromQuotes(
         at,
         symbol: row.symbol,
         kind: "approaching",
-        title: `${row.symbol} به محدوده نزدیک است`,
-        text: `آخرین قیمت ${price} و سقف محدوده ${row.zoneHigh.toPrecision(4)} است. این نزدیکی تأیید خرید نیست.`,
+        title: msg(`${row.symbol} به محدوده نزدیک است`, `${row.symbol} is near the zone`),
+        text: msg(
+          `آخرین قیمت ${price} و سقف محدوده ${row.zoneHigh.toPrecision(4)} است. این نزدیکی تأیید خرید نیست.`,
+          `Last price is ${price} and the zone high is ${row.zoneHigh.toPrecision(4)}. This proximity is not a buy confirmation.`,
+        ),
       });
     } else if (price <= row.zoneHigh && price >= row.zoneLow) {
       out.push({
@@ -197,8 +211,11 @@ export function alertsFromQuotes(
         at,
         symbol: row.symbol,
         kind: "entered",
-        title: `${row.symbol} داخل محدوده است`,
-        text: "قیمت لحظه‌ای وارد باند شده. تأیید هنوز به کندل روزانه، RSI یا MACD نیاز دارد.",
+        title: msg(`${row.symbol} داخل محدوده است`, `${row.symbol} is inside the zone`),
+        text: msg(
+          "قیمت لحظه‌ای وارد باند شده. تأیید هنوز به کندل روزانه، RSI یا MACD نیاز دارد.",
+          "The live price has entered the band. Confirmation still needs a daily close, RSI, or MACD.",
+        ),
       });
     } else if (row.invalidation != null && price < row.invalidation) {
       out.push({
@@ -206,8 +223,11 @@ export function alertsFromQuotes(
         at,
         symbol: row.symbol,
         kind: "invalidated",
-        title: `هشدار اولیه ابطال ${row.symbol}`,
-        text: "قیمت لحظه‌ای زیر سطح ابطال است. ابطال قطعی فقط با بسته شدن روزانه زیر همین سطح ثبت می‌شود.",
+        title: msg(`هشدار اولیه ابطال ${row.symbol}`, `Early invalidation warning for ${row.symbol}`),
+        text: msg(
+          "قیمت لحظه‌ای زیر سطح ابطال است. ابطال قطعی فقط با بسته شدن روزانه زیر همین سطح ثبت می‌شود.",
+          "The live price is under the invalidation level. A hard invalidation is recorded only when the daily close finishes under that level.",
+        ),
       });
     }
   }

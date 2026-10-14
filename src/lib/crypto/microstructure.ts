@@ -1,5 +1,6 @@
 import { clamp } from "./math.ts";
 import type { BookCheck, BookGate, BuySignal, CoinRow } from "./types.ts";
+import { msg } from "@/lib/i18n/lex";
 
 export const SLIP_NOTIONAL_USD = 10_000;
 export const THIN_SLIP_BPS = 35;
@@ -47,20 +48,28 @@ function usdCompact(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
 
-function derivSentence(input: BookInput): string {
-  const parts: string[] = [];
+function derivSentence(input: BookInput): { fa: string; en: string } {
+  const faParts: string[] = [];
+  const enParts: string[] = [];
   if (input.openInterestUsd != null && input.openInterestUsd > 0) {
-    parts.push(`سود باز $${usdCompact(input.openInterestUsd)}`);
+    const usd = usdCompact(input.openInterestUsd);
+    faParts.push(`سود باز $${usd}`);
+    enParts.push(`open interest $${usd}`);
   }
   if (input.oiChange24h != null && Number.isFinite(input.oiChange24h)) {
     const pct = input.oiChange24h * 100;
     const sign = pct > 0 ? "+" : "";
-    parts.push(`تغییر ۲۴س ${sign}${pct.toFixed(1)}٪`);
+    faParts.push(`تغییر ۲۴س ${sign}${pct.toFixed(1)}٪`);
+    enParts.push(`24h change ${sign}${pct.toFixed(1)}%`);
   }
   if (input.longShortRatio != null && Number.isFinite(input.longShortRatio)) {
-    parts.push(`لانگ/شورت ${input.longShortRatio.toFixed(2)}`);
+    faParts.push(`لانگ/شورت ${input.longShortRatio.toFixed(2)}`);
+    enParts.push(`long/short ${input.longShortRatio.toFixed(2)}`);
   }
-  return parts.length ? `${parts.join("، ")}.` : "";
+  return {
+    fa: faParts.length ? `${faParts.join("، ")}.` : "",
+    en: enParts.length ? `${enParts.join(", ")}.` : "",
+  };
 }
 
 export function assessBook(input: BookInput): BookCheck {
@@ -104,9 +113,15 @@ export function assessBook(input: BookInput): BookCheck {
       longShortRatio,
       smallCap,
       gate: "unknown",
-      note: deriv
-        ? `دفتر سفارش بایننس برای این نماد پاسخ نداد. ${deriv}`
-        : "دفتر سفارش بایننس برای این نماد پاسخ نداد؛ فیلتر اسلیپیج اعمال نشد.",
+      note: deriv.fa
+        ? msg(
+            `دفتر سفارش بایننس برای این نماد پاسخ نداد. ${deriv.fa}`,
+            `The Binance order book did not respond for this symbol. ${deriv.en}`,
+          )
+        : msg(
+            "دفتر سفارش بایننس برای این نماد پاسخ نداد؛ فیلتر اسلیپیج اعمال نشد.",
+            "The Binance order book did not respond for this symbol; the slippage filter was not applied.",
+          ),
     };
   }
 
@@ -146,16 +161,29 @@ export function assessBook(input: BookInput): BookCheck {
     fundingAnnual == null
       ? "فاندینگ آتی در دسترس نبود"
       : `فاندینگ سالانه ${(fundingAnnual * 100).toFixed(1)}٪`;
-  const tail = deriv ? ` ${deriv}` : "";
+  const fundEn =
+    fundingAnnual == null
+      ? "futures funding was unavailable"
+      : `annualized funding ${(fundingAnnual * 100).toFixed(1)}%`;
+  const tail = deriv.fa ? ` ${deriv.fa}` : "";
+  const tailEn = deriv.en ? ` ${deriv.en}` : "";
 
-  const note =
+  const note = msg(
     gate === "thin"
       ? `خرید ${Math.round(notionalUsd).toLocaleString("en-US")} دلار حدود ${slipTxt} لغزش دارد و عمق ۱۰bps برابر $${depthTxt} است. سیگنال خرید معلق شد.${tail}`
       : gate === "crowded"
         ? `دفتر سفارش قابل قبول است (${slipTxt}، عمق $${depthTxt}) اما ${fundTxt} — پوزیشن لانگ آتی شلوغ است و حجم اسپات نصف شد.${tail}`
         : gate === "levered"
           ? `دفتر اسپات قابل قبول است (${slipTxt}) اما سود باز آلت خرد داغ است و حجم اسپات نصف شد. ${fundTxt}.${tail}`
-          : `اسلیپیج ${slipTxt}، عمق ۱۰bps برابر $${depthTxt}. ${fundTxt}.${tail}`;
+          : `اسلیپیج ${slipTxt}، عمق ۱۰bps برابر $${depthTxt}. ${fundTxt}.${tail}`,
+    gate === "thin"
+      ? `A buy of ${Math.round(notionalUsd).toLocaleString("en-US")} dollars has about ${slipTxt} of slippage and 10 bps of depth at $${depthTxt}. The buy signal was suspended.${tailEn}`
+      : gate === "crowded"
+        ? `The order book is acceptable (${slipTxt}, depth $${depthTxt}) but ${fundEn} — the futures long is crowded and spot size was halved.${tailEn}`
+        : gate === "levered"
+          ? `The spot book is acceptable (${slipTxt}) but small-cap open interest is hot and spot size was halved. ${fundEn}.${tailEn}`
+          : `Slippage ${slipTxt}, 10 bps depth $${depthTxt}. ${fundEn}.${tailEn}`,
+  );
 
   return {
     symbol,

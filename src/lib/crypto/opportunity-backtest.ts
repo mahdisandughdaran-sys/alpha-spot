@@ -1,6 +1,7 @@
 import type { BtBar, BtSeries } from "./backtest.ts";
 import { maxDrawdown, rsi } from "./math.ts";
 import { evaluateAsset, type SpotBar } from "./opportunity.ts";
+import { msg } from "@/lib/i18n/lex";
 
 export type RegimeBucket = "bull" | "bear" | "range";
 
@@ -231,19 +232,40 @@ export function simulateOpportunityBacktest(series: BtSeries[]): OpportunityBack
   }
   const btc = maps.get("BTC");
   const assumptions = [
-    "ورود فقط بعد از بسته شدن کندلی است که تأیید را ساخته. کندل‌های بعد از آن برای خروج استفاده می‌شوند.",
-    "کارمزد ۱۰ نقطه پایه و لغزش ۸ نقطه پایه در هر طرف لحاظ شده است.",
-    "اگر در یک کندل هم حد ضرر و هم هدف لمس شود، خروج روی حد ضرر فرض می‌شود.",
-    "ریسک هر معامله ۱٪ سرمایه و سقف اندازه ۱۵٪ است. حداکثر چهار موقعیت باز.",
-    "وزن‌های اسکنر روی این نمونه بهینه نشده‌اند. بخش پایانی فقط برای دیدن پایداری است.",
-    "نتیجه گذشته تضمین آینده نیست.",
+    msg(
+      "ورود فقط بعد از بسته شدن کندلی است که تأیید را ساخته. کندل‌های بعد از آن برای خروج استفاده می‌شوند.",
+      "Entry is only after the candle that built the confirmation has closed. Later candles are used for the exit.",
+    ),
+    msg(
+      "کارمزد ۱۰ نقطه پایه و لغزش ۸ نقطه پایه در هر طرف لحاظ شده است.",
+      "A 10 bp fee and 8 bp of slippage are charged on each side.",
+    ),
+    msg(
+      "اگر در یک کندل هم حد ضرر و هم هدف لمس شود، خروج روی حد ضرر فرض می‌شود.",
+      "If one candle touches both the stop and the target, the exit is assumed at the stop.",
+    ),
+    msg(
+      "ریسک هر معامله ۱٪ سرمایه و سقف اندازه ۱۵٪ است. حداکثر چهار موقعیت باز.",
+      "Each trade risks 1% of capital, with a 15% size cap. At most four positions are open.",
+    ),
+    msg(
+      "وزن‌های اسکنر روی این نمونه بهینه نشده‌اند. بخش پایانی فقط برای دیدن پایداری است.",
+      "Scanner weights were not fit on this sample. The final slice is only a stability check.",
+    ),
+    msg("نتیجه گذشته تضمین آینده نیست.", "Past results are not a guarantee of the future."),
   ];
   if (!btc || btc.size < OPPORTUNITY_WARMUP + 20) {
-    return emptyReport("کندل تاریخی بیت‌کوین برای ارزیابی فرصت‌ها کافی نبود.", assumptions);
+    return emptyReport(
+      msg("کندل تاریخی بیت‌کوین برای ارزیابی فرصت‌ها کافی نبود.", "Historical Bitcoin candles were not enough to evaluate the setups."),
+      assumptions,
+    );
   }
   const calendar = [...btc.keys()].sort((a, b) => a - b);
   if (calendar.length < OPPORTUNITY_WARMUP + 20) {
-    return emptyReport("تقویم روزانه کوتاه‌تر از پنجره گرم‌شدن است.", assumptions);
+    return emptyReport(
+      msg("تقویم روزانه کوتاه‌تر از پنجره گرم‌شدن است.", "The daily calendar is shorter than the warmup window."),
+      assumptions,
+    );
   }
 
   const model = simulateBook(maps, calendar, (_symbol, bars, btcCloses) => {
@@ -295,7 +317,10 @@ export function simulateOpportunityBacktest(series: BtSeries[]): OpportunityBack
   const holdoutR = holdoutTrades.length
     ? holdoutTrades.reduce((s, t) => s + t.r, 0) / holdoutTrades.length
     : null;
-  let holdoutNote = "۴۰٪ پایانی تقویم جدا شمرده شده تا وزن‌ها روی کل نمونه قشنگ‌تر از واقعیت به‌نظر نرسند.";
+  let holdoutNote = msg(
+    "۴۰٪ پایانی تقویم جدا شمرده شده تا وزن‌ها روی کل نمونه قشنگ‌تر از واقعیت به‌نظر نرسند.",
+    "The last 40% of the calendar is scored apart so the weights do not look cleaner on the full sample than they are.",
+  );
   if (
     modelStats.winRate != null &&
     holdoutRate != null &&
@@ -303,10 +328,16 @@ export function simulateOpportunityBacktest(series: BtSeries[]): OpportunityBack
     holdoutTrades.length >= 8 &&
     Math.abs(modelStats.winRate - holdoutRate) > 0.15
   ) {
-    holdoutNote = "نرخ برد کل نمونه و بازه پایانی بیش از ۱۵ واحد اختلاف دارند. به عدد کلی اعتماد نکنید.";
+    holdoutNote = msg(
+      "نرخ برد کل نمونه و بازه پایانی بیش از ۱۵ واحد اختلاف دارند. به عدد کلی اعتماد نکنید.",
+      "The full-sample win rate and the final window differ by more than 15 points. Do not trust the headline number.",
+    );
   }
   if (holdoutTrades.length < 8) {
-    holdoutNote = "نمونه بازه پایانی کوچک است و نرخ برد جداگانه‌ای از آن ساخته نمی‌شود.";
+    holdoutNote = msg(
+      "نمونه بازه پایانی کوچک است و نرخ برد جداگانه‌ای از آن ساخته نمی‌شود.",
+      "The final-window sample is small, so a separate win rate is not produced.",
+    );
   }
 
   const btcCloses = calendar.map((day) => btc.get(day)?.c ?? 0).filter((n) => n > 0);
@@ -315,7 +346,12 @@ export function simulateOpportunityBacktest(series: BtSeries[]): OpportunityBack
   const to = new Date((calendar[calendar.length - 1] ?? 0) * 86_400_000).toISOString().slice(0, 10);
   const enough = model.trades.length >= 30;
   if (degraded > series.length) {
-    assumptions.unshift("بخشی از کندل‌ها سقف و کف جدا نداشتند و با قیمت پایانی تقریب زده شدند.");
+    assumptions.unshift(
+      msg(
+        "بخشی از کندل‌ها سقف و کف جدا نداشتند و با قیمت پایانی تقریب زده شدند.",
+        "Some candles had no separate high and low and were approximated with the close.",
+      ),
+    );
   }
 
   return {
@@ -331,10 +367,10 @@ export function simulateOpportunityBacktest(series: BtSeries[]): OpportunityBack
     maxDrawdown: modelStats.maxDrawdown,
     byRegime: [bucket(model.trades, "bull"), bucket(model.trades, "bear"), bucket(model.trades, "range")],
     baselines: [
-      rowOf("افت ۱۰٪ و خروج زمانی", dip.trades, dip.equity),
-      rowOf("ورود با RSI زیر ۳۰", rsiBook.trades, rsiBook.equity),
+      rowOf(msg("افت ۱۰٪ و خروج زمانی", "A 10% dip with a time exit"), dip.trades, dip.equity),
+      rowOf(msg("ورود با RSI زیر ۳۰", "Entry when RSI is under 30"), rsiBook.trades, rsiBook.equity),
       {
-        name: "نگهداری بیت‌کوین",
+        name: msg("نگهداری بیت‌کوین", "Bitcoin hold"),
         trades: 1,
         winRate: null,
         avgR: null,
@@ -358,8 +394,14 @@ export function simulateOpportunityBacktest(series: BtSeries[]): OpportunityBack
     })),
     assumptions,
     note: enough
-      ? "این ارزیابی گذشته است و تضمین آینده نیست. کارمزد و لغزش داخل عددها هستند."
-      : "تعداد معامله‌های تأییدشده برای حرف زدن از نرخ برد کافی نیست. نتیجه را به‌عنوان شاهد آماری نخوانید.",
+      ? msg(
+          "این ارزیابی گذشته است و تضمین آینده نیست. کارمزد و لغزش داخل عددها هستند.",
+          "This is a historical evaluation and not a guarantee of the future. Fees and slippage are inside the numbers.",
+        )
+      : msg(
+          "تعداد معامله‌های تأییدشده برای حرف زدن از نرخ برد کافی نیست. نتیجه را به‌عنوان شاهد آماری نخوانید.",
+          "There are not enough confirmed trades to talk about a win rate. Do not read the result as statistical evidence.",
+        ),
   };
 }
 

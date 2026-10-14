@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n/lex";
 import { clamp } from "./math.ts";
 import type { BuySignal, CoinRow, WeeklyStructure } from "./types.ts";
 

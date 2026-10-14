@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n/lex";
 import { detectWeeklyStructure, ema, lookback, weeklySupportBroken } from "./math.ts";
 import type { BtcKillSwitch, BuySignal, KillSwitchStatus, WeeklyStructure } from "./types.ts";
 

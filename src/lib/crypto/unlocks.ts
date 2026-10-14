@@ -1,4 +1,5 @@
 import type { RawUnlockEvent, UnlockAssessment } from "./types.ts";
+import { msg } from "@/lib/i18n/lex";
 
 /** Subtracted from the total 0–100 score when 30-day unlocks exceed 3% of supply. */
 export function dilutionPenalty(pctOfSupply30d: number): number {
@@ -16,7 +17,7 @@ function dayKey(ms: number): string {
   return `${y}-${m}-${day}`;
 }
 
-export function emptyUnlock(note = "برنامه آزادسازی برای این نماد ثبت نشده است."): UnlockAssessment {
+export function emptyUnlock(note = msg("برنامه آزادسازی برای این نماد ثبت نشده است.", "No unlock schedule is on file for this symbol.")): UnlockAssessment {
   return {
     penalty: 0,
     highDilution: false,
@@ -46,10 +47,10 @@ export function assessUnlocks(input: {
         ? input.totalSupply
         : null;
   if (!supply) {
-    return emptyUnlock("عرضه کل برای تبدیل مقدار آزادسازی به درصد در دسترس نبود.");
+    return emptyUnlock(msg("عرضه کل برای تبدیل مقدار آزادسازی به درصد در دسترس نبود.", "Total supply was unavailable, so unlock amounts could not be turned into a percent."));
   }
   if (input.events.length === 0) {
-    return emptyUnlock("رویداد آزادسازی آینده در تقویم این نماد نیست.");
+    return emptyUnlock(msg("رویداد آزادسازی آینده در تقویم این نماد نیست.", "No future unlock event is on this symbol’s calendar."));
   }
 
   const now = input.now ?? new Date();
@@ -69,7 +70,7 @@ export function assessUnlocks(input: {
   }
 
   if (byDay.size === 0) {
-    return emptyUnlock("در ۳۰ روز آینده آزادسازی ثبت‌شده‌ای نیست.");
+    return emptyUnlock(msg("در ۳۰ روز آینده آزادسازی ثبت‌شده‌ای نیست.", "No recorded unlock falls in the next 30 days."));
   }
 
   let pct30d = 0;
@@ -94,13 +95,23 @@ export function assessUnlocks(input: {
   const pctLabel = pct30d.toFixed(2);
   const bandLabel = bandPct.toFixed(2);
   let note = `آزادسازی ۳۰ روز آینده ${pctLabel}٪ از عرضه است`;
-  if (bandPct > 0) note += `؛ سهم بازه ۱۴ تا ۳۰ روز ${bandLabel}٪`;
-  if (cliff) note += "؛ دست‌کم یک روز کلیف‌مانند (بالای ۱٪ عرضه در یک روز) دیده شد";
+  let noteEn = `Unlocks over the next 30 days are ${pctLabel}% of supply`;
+  if (bandPct > 0) {
+    note += `؛ سهم بازه ۱۴ تا ۳۰ روز ${bandLabel}٪`;
+    noteEn += `; the 14–30 day band is ${bandLabel}%`;
+  }
+  if (cliff) {
+    note += "؛ دست‌کم یک روز کلیف‌مانند (بالای ۱٪ عرضه در یک روز) دیده شد";
+    noteEn += "; at least one cliff-like day (above 1% of supply in a single day) was seen";
+  }
   if (highDilution) {
     note += `. برچسب High Dilution Risk و کسر ${penalty} امتیاز از نمره کل.`;
+    noteEn += `. High Dilution Risk tag, and ${penalty} points deducted from the total score.`;
   } else {
     note += ". زیر آستانه ۳٪ است و جریمه امتیاز ندارد.";
+    noteEn += ". It is under the 3% threshold and carries no score penalty.";
   }
+  note = msg(note, noteEn);
 
   return {
     penalty,

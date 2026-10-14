@@ -3,6 +3,7 @@ import { evaluateKillSwitch } from "./kill-switch.ts";
 import { maxDrawdown } from "./math.ts";
 import { detectRegime, enrichFromKlines, pickWinner, scoreUniverse } from "./scoring.ts";
 import type { CoinDraft } from "./types.ts";
+import { msg } from "@/lib/i18n/lex";
 
 export type BtBar = {
   t: number;
@@ -161,7 +162,7 @@ function priceAt(map: Map<number, BtBar>, day: number): number | null {
 export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
   const btc = series.find((s) => s.symbol === "BTC");
   if (!btc || btc.bars.length < WARMUP + STEP) {
-    return emptyReport("کندل تاریخی بیت‌کوین برای بک‌تست کافی نبود.");
+    return emptyReport(msg("کندل تاریخی بیت‌کوین برای بک‌تست کافی نبود.", "Historical Bitcoin candles were not enough for the backtest."));
   }
 
   const maps = new Map<string, Map<number, BtBar>>();
@@ -173,11 +174,11 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
     maps.set(s.symbol, map);
   }
   const btcMap = maps.get("BTC");
-  if (!btcMap) return emptyReport("سری بیت‌کوین ساخته نشد.");
+  if (!btcMap) return emptyReport(msg("سری بیت‌کوین ساخته نشد.", "The Bitcoin series could not be built."));
 
   const calendar = [...btcMap.keys()].sort((a, b) => a - b);
   if (calendar.length < WARMUP + STEP) {
-    return emptyReport("تقویم روزانه کوتاه‌تر از پنجره گرم‌شدن مدل است.");
+    return emptyReport(msg("تقویم روزانه کوتاه‌تر از پنجره گرم‌شدن مدل است.", "The daily calendar is shorter than the model warmup window."));
   }
 
   let equity = 1;
@@ -292,7 +293,7 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
   }
 
   if (periods === 0 || curve.length === 0) {
-    return emptyReport("در این بازه هیچ نقطه بازچینش معتبری ساخته نشد.");
+    return emptyReport(msg("در این بازه هیچ نقطه بازچینش معتبری ساخته نشد.", "No valid rebalance point was produced in this window."));
   }
 
   const fromMs = (calendar[startIdx] ?? startDay) * 86_400_000;
@@ -307,10 +308,14 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
 
   const totalReturn = equity - 1;
   const winRate = winners / periods;
-  const note =
+  const note = msg(
     totalReturn >= btcReturn
       ? `در این مسیر، مدل از خرید و نگهداری بیت‌کوین جلوتر بود: ${(totalReturn * 100).toFixed(1)}٪ در برابر ${(btcReturn * 100).toFixed(1)}٪.`
-      : `در این مسیر بیت‌کوین بهتر بود: مدل ${(totalReturn * 100).toFixed(1)}٪ و BTC ${(btcReturn * 100).toFixed(1)}٪.`;
+      : `در این مسیر بیت‌کوین بهتر بود: مدل ${(totalReturn * 100).toFixed(1)}٪ و BTC ${(btcReturn * 100).toFixed(1)}٪.`,
+    totalReturn >= btcReturn
+      ? `On this path the model beat buy-and-hold Bitcoin: ${(totalReturn * 100).toFixed(1)}% versus ${(btcReturn * 100).toFixed(1)}%.`
+      : `On this path Bitcoin was better: the model ${(totalReturn * 100).toFixed(1)}% and BTC ${(btcReturn * 100).toFixed(1)}%.`,
+  );
 
   return {
     from: new Date(fromMs).toISOString(),
@@ -327,11 +332,26 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
     curve: downsample(curve, 90),
     holdings,
     assumptions: [
-      "بازچینش هفتگی روی همان امتیاز اسپات (قدرت نسبی، روند، ورود، ریسک) فقط با داده‌ای که تا همان روز وجود داشته.",
-      "توکنومیکس و روایت ثابت‌اند؛ تاریخچه واقعی MC/FDV و آنلاک در این بک‌تست نیست.",
-      "اگر کلید قطع معلق باشد نگهداری بیت‌کوین است؛ در ریسک بالا نیمی از بازده آلت و نیمی بیت‌کوین.",
-      `هزینه جابه‌جایی ${COST_BPS} نقطه پایه. اسلیپیج دفتر سفارش تاریخی در داده عمومی نیست.`,
-      "جهان تست، ارزهای نقد شونده با تاریخچه بلند بایننس است نه هر صد ارز امروز — سوگیری بقا دارد.",
+      msg(
+        "بازچینش هفتگی روی همان امتیاز اسپات (قدرت نسبی، روند، ورود، ریسک) فقط با داده‌ای که تا همان روز وجود داشته.",
+        "Weekly rebalance uses the same spot score (relative strength, trend, entry, risk) and only data that existed through that day.",
+      ),
+      msg(
+        "توکنومیکس و روایت ثابت‌اند؛ تاریخچه واقعی MC/FDV و آنلاک در این بک‌تست نیست.",
+        "Tokenomics and narrative are held fixed; this backtest has no real MC/FDV or unlock history.",
+      ),
+      msg(
+        "اگر کلید قطع معلق باشد نگهداری بیت‌کوین است؛ در ریسک بالا نیمی از بازده آلت و نیمی بیت‌کوین.",
+        "If the kill-switch is suspended, the hold is Bitcoin; in high risk, half the return is the alt and half is Bitcoin.",
+      ),
+      msg(
+        `هزینه جابه‌جایی ${COST_BPS} نقطه پایه. اسلیپیج دفتر سفارش تاریخی در داده عمومی نیست.`,
+        `Turnover cost is ${COST_BPS} basis points. Historical order-book slippage is not in the public data.`,
+      ),
+      msg(
+        "جهان تست، ارزهای نقد شونده با تاریخچه بلند بایننس است نه هر صد ارز امروز — سوگیری بقا دارد.",
+        "The test universe is liquid names with a long Binance history, not today’s top 100 — it has survivorship bias.",
+      ),
     ],
     note,
   };

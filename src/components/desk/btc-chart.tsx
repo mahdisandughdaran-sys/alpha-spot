@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useI18n } from "@/lib/i18n/locale";
 import type { BuyPoint } from "@/lib/crypto/buy-point";
 import type { PairPoint } from "@/lib/crypto/types";
 
@@ -22,13 +23,14 @@ export function BtcPairChart({
   buy: BuyPoint | null;
   mode: "pair" | "usd";
 }) {
+  const { tr } = useI18n();
   const [ready, setReady] = useState(false);
   useEffect(() => {
     setReady(true);
   }, []);
 
   if (data.length < 3) {
-    return <p className="text-sm text-muted">سری ۳۰ روزه این ارز کامل نبود.</p>;
+    return <p className="text-sm text-muted">{tr("سری ۳۰ روزه این ارز کامل نبود.", "The 30-day series for this coin was incomplete.")}</p>;
   }
 
   if (!ready) {
@@ -36,7 +38,10 @@ export function BtcPairChart({
   }
 
   const marked = buy && !buy.flat ? buy : null;
-  const unit = mode === "usd" ? `${symbol} دلار، شاخص ۱۰۰` : `${symbol}/BTC، شاخص ۱۰۰`;
+  const unit =
+    mode === "usd"
+      ? tr(`${symbol} دلار، شاخص ۱۰۰`, `${symbol} in dollars, index 100`)
+      : tr(`${symbol}/BTC، شاخص ۱۰۰`, `${symbol}/BTC, index 100`);
 
   return (
     <div className="h-64 w-full" dir="ltr">
@@ -67,17 +72,19 @@ export function BtcPairChart({
               if (!Number.isFinite(n)) return null;
               const day = Number(label);
               const delta = n - 100;
-              const tag = marked && day === marked.index ? " · نقطه خرید" : "";
+              const tag = marked && day === marked.index ? tr(" · نقطه خرید", " · buy point") : "";
               return (
                 <div className="glass-pop rounded-lg px-3 py-2">
-                  <p className="text-xs text-subtle">روز {day + 1}</p>
+                  <p className="text-xs text-subtle">
+                    {tr("روز", "Day")} {day + 1}
+                  </p>
                   <p className="num mt-1 text-sm text-fg">
                     {n.toFixed(2)}
                     {tag}
                   </p>
                   <p className={`num text-xs ${delta >= 0 ? "text-up" : "text-down"}`}>
                     {delta >= 0 ? "+" : ""}
-                    {delta.toFixed(2)} از شروع بازه
+                    {delta.toFixed(2)} {tr("از شروع بازه", "from the start of the window")}
                   </p>
                   <p className="mt-1 text-xs text-muted">{unit}</p>
                 </div>

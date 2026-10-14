@@ -2,6 +2,7 @@ import { Star } from "lucide-react";
 import type { CoinRow } from "@/lib/crypto/types";
 import { btcPriceLabel } from "@/lib/crypto/explain";
 import type { DeskFilter } from "@/lib/crypto/risk-view";
+import { useI18n } from "@/lib/i18n/locale";
 import { CoinMark } from "./coin-mark";
 import { FlashValue } from "./flash-value";
 import { formatPct, formatScore, formatUsd } from "./format";
@@ -12,6 +13,13 @@ const EMPTY: Record<DeskFilter, string> = {
   unlock: "در این نمونه آزادسازی قابل‌سنجش نیست.",
   rebalance: "مقصد چرخشی با امتیاز بالای ۶۸، بدون رقیق‌سازی و با سیگنال باز پیدا نشد.",
   "btc-cycle": "سیکل آرام بیت‌کوین — روند غیرنزولی، بتای کنترل‌شده و فشار ریسک زیر ۵۰ — در این اسکن خالی است.",
+};
+
+const EMPTY_EN: Record<DeskFilter, string> = {
+  all: "Nothing to rank.",
+  unlock: "No measurable unlock in this sample.",
+  rebalance: "No rotation target scored above 68, clean of dilution, with an open signal.",
+  "btc-cycle": "Quiet Bitcoin cycle — non-bearish trend, contained beta, and risk pressure under 50 — is empty in this scan.",
 };
 
 export function Leaderboard({
@@ -29,18 +37,23 @@ export function Leaderboard({
   live: Record<string, number>;
   filter: DeskFilter;
 }) {
+  const { tr, locale } = useI18n();
+  const pct = locale === "en" ? "%" : "٪";
   return (
     <section className="rounded-xl bg-surface">
       <div className="flex items-end justify-between gap-3 p-5">
         <div>
-          <h3 className="text-base font-medium text-fg">رتبه‌بندی مدل</h3>
+          <h3 className="text-base font-medium text-fg">{tr("رتبه‌بندی مدل", "Model ranks")}</h3>
           <p className="mt-1 text-xs text-subtle">
-            قیمت دلار با تیکر زنده چشمک می‌زند. فشار ریسک جدا از امتیاز اسپات است و با لمس نوارها باز می‌شود.
+            {tr(
+              "قیمت دلار با تیکر زنده چشمک می‌زند. فشار ریسک جدا از امتیاز اسپات است و با لمس نوارها باز می‌شود.",
+              "The USD price flashes on the live ticker. Risk pressure is separate from the spot score and opens when you touch the bars.",
+            )}
           </p>
         </div>
       </div>
       {rows.length === 0 ? (
-        <p className="px-5 pb-6 text-sm text-muted">{EMPTY[filter]}</p>
+        <p className="px-5 pb-6 text-sm text-muted">{tr(EMPTY[filter], EMPTY_EN[filter])}</p>
       ) : (
         <>
           <div className="flex flex-col gap-2 px-3 pb-3 md:hidden">
@@ -67,24 +80,24 @@ export function Leaderboard({
                       type="button"
                       onClick={() => onToggleWatch(row.symbol)}
                       className="flex size-11 items-center justify-center rounded-md text-subtle"
-                      aria-label={starred ? "حذف از واچ‌لیست" : "افزودن به واچ‌لیست"}
+                      aria-label={starred ? tr("حذف از واچ‌لیست", "Remove from watchlist") : tr("افزودن به واچ‌لیست", "Add to watchlist")}
                     >
                       <Star className="size-4" fill={starred ? "currentColor" : "none"} />
                     </button>
                   </div>
                   <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
                     <div>
-                      <dt className="text-subtle">امتیاز</dt>
+                      <dt className="text-subtle">{tr("امتیاز", "Score")}</dt>
                       <dd className="mt-1">
                         <FlashValue id={`score:${row.symbol}`} value={row.score} format={formatScore} className="text-fg" />
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-subtle">۷ر vs BTC</dt>
+                      <dt className="text-subtle">{tr("۷ر vs BTC", "7d vs BTC")}</dt>
                       <dd className={`num mt-1 ${rsTone}`}>{formatPct(row.rs7d)}</dd>
                     </div>
                     <div>
-                      <dt className="text-subtle">قیمت</dt>
+                      <dt className="text-subtle">{tr("قیمت", "Price")}</dt>
                       <dd className="mt-1">
                         <FlashValue id={`px:${row.symbol}`} value={price} format={(n) => `$${formatUsd(n)}`} className="text-fg" />
                       </dd>
@@ -103,14 +116,14 @@ export function Leaderboard({
                 <tr className="border-t border-border text-xs text-subtle">
                   <th className="px-3 py-2 text-start font-medium" />
                   <th className="px-4 py-2 text-start font-medium">#</th>
-                  <th className="px-4 py-2 text-start font-medium">ارز</th>
-                  <th className="px-4 py-2 text-start font-medium">امتیاز</th>
-                  <th className="px-4 py-2 text-start font-medium">فشار ریسک</th>
-                  <th className="px-4 py-2 text-start font-medium">۷ر vs BTC</th>
+                  <th className="px-4 py-2 text-start font-medium">{tr("ارز", "Asset")}</th>
+                  <th className="px-4 py-2 text-start font-medium">{tr("امتیاز", "Score")}</th>
+                  <th className="px-4 py-2 text-start font-medium">{tr("فشار ریسک", "Risk pressure")}</th>
+                  <th className="px-4 py-2 text-start font-medium">{tr("۷ر vs BTC", "7d vs BTC")}</th>
                   <th className="px-4 py-2 text-start font-medium">MC/FDV</th>
-                  <th className="px-4 py-2 text-start font-medium">آنلاک ۳۰ر</th>
-                  <th className="px-4 py-2 text-start font-medium">سیگنال</th>
-                  <th className="px-4 py-2 text-start font-medium">قیمت</th>
+                  <th className="px-4 py-2 text-start font-medium">{tr("آنلاک ۳۰ر", "30d unlock")}</th>
+                  <th className="px-4 py-2 text-start font-medium">{tr("سیگنال", "Signal")}</th>
+                  <th className="px-4 py-2 text-start font-medium">{tr("قیمت", "Price")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,7 +139,7 @@ export function Leaderboard({
                           type="button"
                           onClick={() => onToggleWatch(row.symbol)}
                           className="flex size-9 items-center justify-center rounded-md text-subtle hover:text-fg"
-                          aria-label={starred ? "حذف از واچ‌لیست" : "افزودن به واچ‌لیست"}
+                          aria-label={starred ? tr("حذف از واچ‌لیست", "Remove from watchlist") : tr("افزودن به واچ‌لیست", "Add to watchlist")}
                         >
                           <Star className="size-4" fill={starred ? "currentColor" : "none"} />
                         </button>
@@ -143,7 +156,7 @@ export function Leaderboard({
                       </td>
                       <td className={`num px-4 py-3 ${rsTone}`}>{formatPct(row.rs7d)}</td>
                       <td className="num px-4 py-3 text-muted">
-                        {row.mcFdv == null ? "—" : `${(row.mcFdv * 100).toFixed(0)}٪`}
+                        {row.mcFdv == null ? "—" : `${(row.mcFdv * 100).toFixed(0)}${pct}`}
                       </td>
                       <td className="px-4 py-3">
                         {row.highDilution ? (
@@ -153,12 +166,12 @@ export function Leaderboard({
                           </span>
                         ) : (
                           <span className="num text-xs text-muted">
-                            {row.unlockPct30d == null ? "—" : `${row.unlockPct30d.toFixed(1)}٪`}
+                            {row.unlockPct30d == null ? "—" : `${row.unlockPct30d.toFixed(1)}${pct}`}
                           </span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted">
-                        {row.buySignal === "suspended" ? "معلق" : row.buySignal === "reduced" ? "حجم ۵۰٪" : "باز"}
+                        {row.buySignal === "suspended" ? tr("معلق", "Suspended") : row.buySignal === "reduced" ? tr("حجم ۵۰٪", "50% size") : tr("باز", "Open")}
                       </td>
                       <td className="px-4 py-3">
                         <FlashValue id={`px:${row.symbol}`} value={price} format={(n) => `$${formatUsd(n)}`} className="text-fg" />

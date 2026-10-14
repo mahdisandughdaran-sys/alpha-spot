@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n/lex";
 /** Volume-flow, estimated liquidation map, and the spot size formula.
  *  Position ($) = (capital × risk%) / stop%.
  *  Pure functions only — the server fetch lives in confluence.server.ts.

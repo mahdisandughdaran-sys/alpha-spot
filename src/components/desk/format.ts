@@ -1,3 +1,9 @@
+import { getLocale } from "@/lib/i18n/lex";
+
+function unit() {
+  return getLocale() === "en" ? "%" : "٪";
+}
+
 export function formatUsd(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -11,12 +17,12 @@ export function formatUsd(n: number): string {
 export function formatPct(ratio: number, digits = 1): string {
   const v = ratio * 100;
   const sign = v > 0 ? "+" : "";
-  return `${sign}${v.toFixed(digits)}٪`;
+  return `${sign}${v.toFixed(digits)}${unit()}`;
 }
 
 export function formatPctPoints(pctPoints: number, digits = 1): string {
   const sign = pctPoints > 0 ? "+" : "";
-  return `${sign}${pctPoints.toFixed(digits)}٪`;
+  return `${sign}${pctPoints.toFixed(digits)}${unit()}`;
 }
 
 export function formatScore(n: number): string {
@@ -26,7 +32,7 @@ export function formatScore(n: number): string {
 export function timeAgoFa(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("fa-IR", {
+  return d.toLocaleString(getLocale() === "en" ? "en-US" : "fa-IR", {
     hour: "2-digit",
     minute: "2-digit",
   });

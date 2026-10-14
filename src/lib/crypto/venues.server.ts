@@ -9,6 +9,7 @@ import {
   type VenueCall,
   type VenueResult,
 } from "./venues.ts";
+import { msg } from "@/lib/i18n/lex";
 
 const HOST: Record<VenueCall["venue"], string> = {
   nobitex: "apiv2.nobitex.ir",
@@ -23,7 +24,7 @@ let lastPrivateAt = 0;
 type HttpResult = { status: number; json: unknown; text: string };
 
 function assertHost(host: string) {
-  if (!Object.values(HOST).includes(host)) throw new Error("میزبان مجاز نیست.");
+  if (!Object.values(HOST).includes(host)) throw new Error(msg("میزبان مجاز نیست.", "The host is not allowed."));
 }
 
 async function request(
@@ -57,7 +58,11 @@ async function request(
     return { status: res.status, json, text };
   } catch (err) {
     const aborted = err instanceof Error && err.name === "AbortError";
-    throw new Error(aborted ? "صرافی در زمان مقرر جواب نداد." : "ارتباط با صرافی برقرار نشد.");
+    throw new Error(
+      aborted
+        ? msg("صرافی در زمان مقرر جواب نداد.", "The venue did not answer in time.")
+        : msg("ارتباط با صرافی برقرار نشد.", "Could not connect to the venue."),
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -83,7 +88,7 @@ async function privateCall(
 
 export function signEd25519(privateKeyB64Url: string, message: string): string {
   const seed = Buffer.from(privateKeyB64Url.trim(), "base64url");
-  if (seed.length !== 32) throw new Error("کلید خصوصی نوبیتکس باید ۳۲ بایت باشد.");
+  if (seed.length !== 32) throw new Error(msg("کلید خصوصی نوبیتکس باید ۳۲ بایت باشد.", "The Nobitex private key must be 32 bytes."));
   const pkcs8 = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
   const key = createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
   return sign(null, Buffer.from(message), key).toString("base64url");
@@ -201,11 +206,11 @@ async function probeNobitex(input: VenueCall): Promise<VenueResult> {
     headers: nobitexHeaders(input, "POST", path, body),
     body,
   });
-  if (!accepted(res)) return fail(input, `نوبیتکس موجودی را نداد. ${res.text}`);
+  if (!accepted(res)) return fail(input, msg(`نوبیتکس موجودی را نداد. ${res.text}`, `Nobitex did not return balances. ${res.text}`));
   return {
     ok: true,
     action: "probe",
-    detail: "اتصال نوبیتکس برقرار شد. کلید روی سرور ذخیره نشد.",
+    detail: msg("اتصال نوبیتکس برقرار شد. کلید روی سرور ذخیره نشد.", "Nobitex is connected. The key was not stored on the server."),
     balances: pullBalances(res.json),
     orderId: null,
     planned: "",
@@ -217,18 +222,18 @@ async function probeWallex(input: VenueCall): Promise<VenueResult> {
     method: "GET",
     headers: { "x-api-key": input.key.trim() },
   });
-  if (!accepted(res)) return fail(input, `والکس موجودی را نداد. ${res.text}`);
+  if (!accepted(res)) return fail(input, msg(`والکس موجودی را نداد. ${res.text}`, `Wallex did not return balances. ${res.text}`));
   return {
     ok: true,
     action: "probe",
-    detail: "اتصال والکس برقرار شد. کلید روی سرور ذخیره نشد.",
+    detail: msg("اتصال والکس برقرار شد. کلید روی سرور ذخیره نشد.", "Wallex is connected. The key was not stored on the server."),
     balances: pullBalances(res.json),
     orderId: null,
     planned: "",
   };
 }
 
-async function probeBearer(input: VenueCall, host: string, paths: string[], label: string): Promise<VenueResult> {
+async function probeBearer(input: VenueCall, host: string, paths: string[], label: string, labelEn = label): Promise<VenueResult> {
   let last = "پاسخی نیامد.";
   for (const path of paths) {
     const res = await privateCall(host, path, {
@@ -240,7 +245,10 @@ async function probeBearer(input: VenueCall, host: string, paths: string[], labe
       return {
         ok: true,
         action: "probe",
-        detail: `اتصال ${label} برقرار شد. کلید روی سرور ذخیره نشد.`,
+        detail: msg(
+          `اتصال ${label} برقرار شد. کلید روی سرور ذخیره نشد.`,
+          `${labelEn} is connected. The key was not stored on the server.`,
+        ),
         balances: pullBalances(res.json),
         orderId: null,
         planned: "",
@@ -248,7 +256,7 @@ async function probeBearer(input: VenueCall, host: string, paths: string[], labe
     }
     if (res.status !== 404) break;
   }
-  return fail(input, `${label} موجودی را نداد. ${last}`);
+  return fail(input, msg(`${label} موجودی را نداد. ${last}`, `${labelEn} did not return balances. ${last}`));
 }
 
 async function probeBinance(input: VenueCall): Promise<VenueResult> {
@@ -259,11 +267,11 @@ async function probeBinance(input: VenueCall): Promise<VenueResult> {
     method: "GET",
     headers: { "X-MBX-APIKEY": input.key.trim() },
   });
-  if (!accepted(res)) return fail(input, `بایننس موجودی را نداد. ${res.text}`);
+  if (!accepted(res)) return fail(input, msg(`بایننس موجودی را نداد. ${res.text}`, `Binance did not return balances. ${res.text}`));
   return {
     ok: true,
     action: "probe",
-    detail: "اتصال بایننس برقرار شد. کلید روی سرور ذخیره نشد.",
+    detail: msg("اتصال بایننس برقرار شد. کلید روی سرور ذخیره نشد.", "Binance is connected. The key was not stored on the server."),
     balances: pullBalances(res.json),
     orderId: null,
     planned: "",
@@ -284,11 +292,11 @@ async function probeBybit(input: VenueCall): Promise<VenueResult> {
       "X-BAPI-SIGN": hmac(input.secret.trim(), payload),
     },
   });
-  if (!accepted(res)) return fail(input, `بای‌بیت موجودی را نداد. ${res.text}`);
+  if (!accepted(res)) return fail(input, msg(`بای‌بیت موجودی را نداد. ${res.text}`, `Bybit did not return balances. ${res.text}`));
   return {
     ok: true,
     action: "probe",
-    detail: "اتصال بای‌بیت برقرار شد. کلید روی سرور ذخیره نشد.",
+    detail: msg("اتصال بای‌بیت برقرار شد. کلید روی سرور ذخیره نشد.", "Bybit is connected. The key was not stored on the server."),
     balances: pullBalances(res.json),
     orderId: null,
     planned: "",
@@ -305,8 +313,8 @@ async function placeSigned(input: VenueCall): Promise<VenueResult> {
       headers: nobitexHeaders(input, "POST", plan.path, body),
       body,
     });
-    if (!accepted(res)) return fail(input, `نوبیتکس سفارش را نپذیرفت. ${res.text}`, planned);
-    return placed(input, "سفارش نوبیتکس ثبت شد.", digId(res.json), planned);
+    if (!accepted(res)) return fail(input, msg(`نوبیتکس سفارش را نپذیرفت. ${res.text}`, `Nobitex rejected the order. ${res.text}`), planned);
+    return placed(input, "سفارش نوبیتکس ثبت شد.", "The Nobitex order was placed.", digId(res.json), planned);
   }
   if (input.venue === "wallex" && plan.body) {
     const res = await privateCall(HOST.wallex, plan.path, {
@@ -314,8 +322,8 @@ async function placeSigned(input: VenueCall): Promise<VenueResult> {
       headers: { "x-api-key": input.key.trim() },
       body: JSON.stringify(plan.body),
     });
-    if (!accepted(res)) return fail(input, `والکس سفارش را نپذیرفت. ${res.text}`, planned);
-    return placed(input, "سفارش والکس ثبت شد.", digId(res.json), planned);
+    if (!accepted(res)) return fail(input, msg(`والکس سفارش را نپذیرفت. ${res.text}`, `Wallex rejected the order. ${res.text}`), planned);
+    return placed(input, "سفارش والکس ثبت شد.", "The Wallex order was placed.", digId(res.json), planned);
   }
   if (input.venue === "ompfinex" && plan.body) {
     return placeOmp(input, plan.body, planned);
@@ -328,8 +336,8 @@ async function placeSigned(input: VenueCall): Promise<VenueResult> {
       method: "POST",
       headers: { "X-MBX-APIKEY": input.key.trim() },
     });
-    if (!accepted(res)) return fail(input, `بایننس سفارش را نپذیرفت. ${res.text}`, planned);
-    return placed(input, "سفارش بایننس ثبت شد.", digId(res.json), planned);
+    if (!accepted(res)) return fail(input, msg(`بایننس سفارش را نپذیرفت. ${res.text}`, `Binance rejected the order. ${res.text}`), planned);
+    return placed(input, "سفارش بایننس ثبت شد.", "The Binance order was placed.", digId(res.json), planned);
   }
   if (input.venue === "bybit" && plan.body) {
     const body = JSON.stringify(plan.body);
@@ -346,10 +354,10 @@ async function placeSigned(input: VenueCall): Promise<VenueResult> {
       },
       body,
     });
-    if (!accepted(res)) return fail(input, `بای‌بیت سفارش را نپذیرفت. ${res.text}`, planned);
-    return placed(input, "سفارش بای‌بیت ثبت شد.", digId(res.json), planned);
+    if (!accepted(res)) return fail(input, msg(`بای‌بیت سفارش را نپذیرفت. ${res.text}`, `Bybit rejected the order. ${res.text}`), planned);
+    return placed(input, "سفارش بای‌بیت ثبت شد.", "The Bybit order was placed.", digId(res.json), planned);
   }
-  return fail(input, "سفارش ساخته نشد.", planned);
+  return fail(input, msg("سفارش ساخته نشد.", "The order was not built."), planned);
 }
 
 async function placeOmp(
@@ -371,10 +379,10 @@ async function placeOmp(
       body: JSON.stringify(body),
     });
     last = res.text;
-    if (accepted(res)) return placed(input, "سفارش اوام‌پی فینکس ثبت شد.", digId(res.json), planned);
+    if (accepted(res)) return placed(input, "سفارش اوام‌پی فینکس ثبت شد.", "The OMPFinex order was placed.", digId(res.json), planned);
     if (res.status !== 404) break;
   }
-  return fail(input, `اوام‌پی فینکس سفارش را نپذیرفت. ${last}`, planned);
+  return fail(input, msg(`اوام‌پی فینکس سفارش را نپذیرفت. ${last}`, `OMPFinex rejected the order. ${last}`), planned);
 }
 
 function findMarketId(payload: unknown, want: string): string | number | null {
@@ -405,11 +413,14 @@ function findMarketId(payload: unknown, want: string): string | number | null {
   return found;
 }
 
-function placed(input: VenueCall, detail: string, orderId: string | null, planned: string): VenueResult {
+function placed(input: VenueCall, detail: string, detailEn: string, orderId: string | null, planned: string): VenueResult {
   return {
     ok: true,
     action: "place",
-    detail: orderId ? `${detail} شناسه ${orderId}.` : detail,
+    detail: msg(
+      orderId ? `${detail} شناسه ${orderId}.` : detail,
+      orderId ? `${detailEn} Id ${orderId}.` : detailEn,
+    ),
     balances: [],
     orderId,
     planned,
@@ -417,9 +428,9 @@ function placed(input: VenueCall, detail: string, orderId: string | null, planne
 }
 
 function requireKey(input: VenueCall) {
-  if (input.key.trim().length < 8) throw new Error("کلید API را وارد کنید. روی سرور ذخیره نمی‌شود.");
+  if (input.key.trim().length < 8) throw new Error(msg("کلید API را وارد کنید. روی سرور ذخیره نمی‌شود.", "Enter the API key. It is not stored on the server."));
   if ((input.venue === "binance" || input.venue === "bybit") && input.secret.trim().length < 8) {
-    throw new Error("کلید مخفی این صرافی لازم است.");
+    throw new Error(msg("کلید مخفی این صرافی لازم است.", "This venue requires the secret key."));
   }
 }
 
@@ -429,7 +440,7 @@ export async function executeVenue(input: VenueCall): Promise<VenueResult> {
     return {
       ok: true,
       action: "preview",
-      detail: "پیش‌نمایش است. هیچ سفارشی به صرافی نرفت.",
+      detail: msg("پیش‌نمایش است. هیچ سفارشی به صرافی نرفت.", "This is a preview. No order was sent to the venue."),
       balances: [],
       orderId: null,
       planned: describePlan(plan),
@@ -438,23 +449,23 @@ export async function executeVenue(input: VenueCall): Promise<VenueResult> {
   try {
     requireKey(input);
   } catch (err) {
-    return fail(input, err instanceof Error ? err.message : "کلید ناقص است.");
+    return fail(input, err instanceof Error ? err.message : msg("کلید ناقص است.", "The key is incomplete."));
   }
   if (input.action === "place" && input.confirm.trim().toUpperCase() !== input.symbol.trim().toUpperCase()) {
-    return fail(input, "برای ثبت واقعی باید خود نماد را در کادر تأیید بنویسید.");
+    return fail(input, msg("برای ثبت واقعی باید خود نماد را در کادر تأیید بنویسید.", "For a live order, type the ticker itself in the confirmation box."));
   }
   try {
     if (input.action === "probe") {
       if (input.venue === "nobitex") return await probeNobitex(input);
       if (input.venue === "wallex") return await probeWallex(input);
       if (input.venue === "ompfinex") {
-        return await probeBearer(input, HOST.ompfinex, ["/v1/user/wallet", "/v1/wallet", "/v1/user"], "اوام‌پی فینکس");
+        return await probeBearer(input, HOST.ompfinex, ["/v1/user/wallet", "/v1/wallet", "/v1/user"], "اوام‌پی فینکس", "OMPFinex");
       }
       if (input.venue === "binance") return await probeBinance(input);
       return await probeBybit(input);
     }
     return await placeSigned(input);
   } catch (err) {
-    return fail(input, err instanceof Error ? err.message : "اجرای صرافی انجام نشد.");
+    return fail(input, err instanceof Error ? err.message : msg("اجرای صرافی انجام نشد.", "The venue call did not finish."));
   }
 }

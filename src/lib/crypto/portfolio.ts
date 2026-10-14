@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n/lex";
 import type { BtcKillSwitch, CoinRow, Regime, Sleeve, SleeveLeg } from "./types.ts";
 
 function splitByScore(rows: CoinRow[], totalWeight: number, maxN: number): SleeveLeg[] {

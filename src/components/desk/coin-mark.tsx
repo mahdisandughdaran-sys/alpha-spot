@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useI18n } from "@/lib/i18n/locale";
 
 const BOX = {
   sm: "size-8",
@@ -17,6 +18,7 @@ export function CoinMark({
   rank?: number;
   size?: "sm" | "md" | "lg";
 }) {
+  const { tr } = useI18n();
   const [stage, setStage] = useState<0 | 1 | 2>(0);
   const ticker = symbol.toLowerCase();
   const src =
@@ -53,7 +55,7 @@ export function CoinMark({
                 : "truncate text-sm text-fg"
             }
           >
-            {name}
+            {tr(name)}
           </span>
           <span className="num inline-flex h-6 shrink-0 items-center rounded-sm bg-fg px-1.5 text-xs font-medium text-bg">
             {symbol}
@@ -61,7 +63,7 @@ export function CoinMark({
         </div>
         {rank != null ? (
           <p className="mt-0.5 text-xs text-subtle">
-            رتبه بازار <span className="num">#{rank}</span>
+            {tr("رتبه بازار", "Market rank")} <span className="num">#{rank}</span>
           </p>
         ) : null}
       </div>

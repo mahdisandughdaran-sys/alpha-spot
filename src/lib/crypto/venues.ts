@@ -1,4 +1,5 @@
 import { candidateBases } from "./exclusions.ts";
+import { msg } from "@/lib/i18n/lex";
 
 export const VENUES = ["nobitex", "wallex", "ompfinex", "binance", "bybit"] as const;
 export type VenueId = (typeof VENUES)[number];
@@ -7,11 +8,11 @@ export type VenueAction = "probe" | "preview" | "place";
 export type VenueSide = "BUY" | "SELL";
 
 export const VENUE_LABEL: Record<VenueId, string> = {
-  nobitex: "نوبیتکس",
-  wallex: "والکس",
-  ompfinex: "اوام‌پی فینکس",
-  binance: "بایننس",
-  bybit: "بای‌بیت",
+  nobitex: msg("نوبیتکس", "Nobitex"),
+  wallex: msg("والکس", "Wallex"),
+  ompfinex: msg("اوام‌پی فینکس", "OMPFinex"),
+  binance: msg("بایننس", "Binance"),
+  bybit: msg("بای‌بیت", "Bybit"),
 };
 
 export type VenueCall = {
@@ -95,23 +96,23 @@ export function assertSized(input: {
   venue: VenueId;
 }): { symbol: string; qty: number; notional: number } {
   const symbol = input.symbol.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (!/^[A-Z0-9]{2,15}$/.test(symbol)) throw new Error("نماد نامعتبر است.");
-  if (!(input.priceUsd > 0)) throw new Error("قیمت دلار این نماد در تحلیل نیست.");
+  if (!/^[A-Z0-9]{2,15}$/.test(symbol)) throw new Error(msg("نماد نامعتبر است.", "The ticker is invalid."));
+  if (!(input.priceUsd > 0)) throw new Error(msg("قیمت دلار این نماد در تحلیل نیست.", "This ticker has no USD price in the analysis."));
   const notional = Number(input.notionalUsd);
   if (!(notional >= 5) || notional > MAX_NOTIONAL) {
-    throw new Error("حجم هر سفارش باید بین ۵ و ۵۰٬۰۰۰ دلار باشد.");
+    throw new Error(msg("حجم هر سفارش باید بین ۵ و ۵۰٬۰۰۰ دلار باشد.", "Each order must be between 5 and 50,000 dollars."));
   }
   if (
     input.quote === "IRT" &&
     (input.venue === "binance" || input.venue === "bybit")
   ) {
-    throw new Error("بایننس و بای‌بیت در این میز فقط بازار تتر را مستقیم ثبت می‌کنند.");
+    throw new Error(msg("بایننس و بای‌بیت در این میز فقط بازار تتر را مستقیم ثبت می‌کنند.", "Binance and Bybit on this desk post the USDT market only."));
   }
   if (input.quote === "IRT" && !(input.tomanPerUsdt >= 1_000 && input.tomanPerUsdt <= 10_000_000)) {
-    throw new Error("نرخ تتر به تومان را وارد کنید.");
+    throw new Error(msg("نرخ تتر به تومان را وارد کنید.", "Enter the USDT-to-toman rate."));
   }
   const qty = Math.floor((notional / input.priceUsd) * 1e6) / 1e6;
-  if (!(qty > 0)) throw new Error("حجم پایه صفر شد.");
+  if (!(qty > 0)) throw new Error(msg("حجم پایه صفر شد.", "Base size rounded to zero."));
   return { symbol, qty, notional };
 }
 
@@ -142,7 +143,10 @@ export function planVenueOrder(
     };
     return {
       venue: input.venue,
-      summary: `نوبیتکس ${side === "BUY" ? "خرید" : "فروش"} مارکت ${qty} ${base} با سقف قیمت ${price} ${rial ? "ریال" : "تتر"}`,
+      summary: msg(
+        `نوبیتکس ${side === "BUY" ? "خرید" : "فروش"} مارکت ${qty} ${base} با سقف قیمت ${price} ${rial ? "ریال" : "تتر"}`,
+        `Nobitex ${side === "BUY" ? "buy" : "sell"} market ${qty} ${base} with a price cap of ${price} ${rial ? "rial" : "USDT"}`,
+      ),
       method: "POST",
       path: "/market/orders/add",
       body,
@@ -167,7 +171,10 @@ export function planVenueOrder(
     };
     return {
       venue: input.venue,
-      summary: `والکس ${side} مارکت ${qty} ${body.symbol} با قیمت محافظ ${price}`,
+      summary: msg(
+        `والکس ${side} مارکت ${qty} ${body.symbol} با قیمت محافظ ${price}`,
+        `Wallex ${side} market ${qty} ${body.symbol} with a protective price of ${price}`,
+      ),
       method: "POST",
       path: "/v1/account/orders",
       body,
@@ -186,7 +193,10 @@ export function planVenueOrder(
     };
     return {
       venue: input.venue,
-      summary: `اوام‌پی فینکس ${side === "BUY" ? "خرید" : "فروش"} مارکت ${qty} ${body.market}`,
+      summary: msg(
+        `اوام‌پی فینکس ${side === "BUY" ? "خرید" : "فروش"} مارکت ${qty} ${body.market}`,
+        `OMPFinex ${side === "BUY" ? "buy" : "sell"} market ${qty} ${body.market}`,
+      ),
       method: "POST",
       path: "/v1/order",
       body,
@@ -206,10 +216,14 @@ export function planVenueOrder(
     else params.set("quantity", qty);
     return {
       venue: input.venue,
-      summary:
+      summary: msg(
         side === "BUY"
           ? `بایننس خرید مارکت ${money(sized.notional, 2)} تتر ${base}`
           : `بایننس فروش مارکت ${qty} ${base}`,
+        side === "BUY"
+          ? `Binance buy market ${money(sized.notional, 2)} USDT of ${base}`
+          : `Binance sell market ${qty} ${base}`,
+      ),
       method: "POST",
       path: "/api/v3/order",
       body: null,
@@ -229,10 +243,14 @@ export function planVenueOrder(
   };
   return {
     venue: input.venue,
-    summary:
+    summary: msg(
       side === "BUY"
         ? `بای‌بیت خرید مارکت ${body.qty} تتر ${base}`
         : `بای‌بیت فروش مارکت ${qty} ${base}`,
+      side === "BUY"
+        ? `Bybit buy market ${body.qty} USDT of ${base}`
+        : `Bybit sell market ${qty} ${base}`,
+    ),
     method: "POST",
     path: "/v5/order/create",
     body,
@@ -259,10 +277,10 @@ export function redact(text: string, secrets: string[]): string {
 }
 
 export function normalizeVenueCall(input: VenueCall): VenueCall {
-  if (!input || typeof input !== "object") throw new Error("درخواست خالی است.");
-  if (!isVenue(String(input.venue))) throw new Error("صرافی نامعتبر است.");
+  if (!input || typeof input !== "object") throw new Error(msg("درخواست خالی است.", "The request is empty."));
+  if (!isVenue(String(input.venue))) throw new Error(msg("صرافی نامعتبر است.", "The venue is invalid."));
   if (input.action !== "probe" && input.action !== "preview" && input.action !== "place") {
-    throw new Error("عملیات نامعتبر است.");
+    throw new Error(msg("عملیات نامعتبر است.", "The action is invalid."));
   }
   return {
     action: input.action,

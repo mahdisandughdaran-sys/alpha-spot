@@ -1,3 +1,4 @@
+import { msg } from "@/lib/i18n/lex";
 import { clamp, ema, mean, rsi, stdev } from "./math.ts";
 
 /**

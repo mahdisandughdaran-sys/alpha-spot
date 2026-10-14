@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
+import { useI18n } from "@/lib/i18n/locale";
 import { cn } from "@/lib/utils";
 
 export function ExplainTip({
@@ -14,6 +15,7 @@ export function ExplainTip({
   children?: ReactNode;
   className?: string;
 }) {
+  const { tr } = useI18n();
   const [open, setOpen] = useState(false);
   const [box, setBox] = useState<{ top: number; left: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -90,8 +92,8 @@ export function ExplainTip({
               style={{ top: box.top, left: box.left }}
               className="glass-pop fixed z-50 w-72 rounded-lg p-3 text-start"
             >
-              <span className="block text-xs font-medium text-fg">{title}</span>
-              <span className="mt-1 block text-xs leading-relaxed text-muted">{body}</span>
+              <span className="block text-xs font-medium text-fg">{tr(title)}</span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted">{tr(body)}</span>
             </span>,
             document.body,
           )

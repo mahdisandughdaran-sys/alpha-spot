@@ -1,22 +1,37 @@
 import { Check, Minus, X } from "lucide-react";
+import { useI18n } from "@/lib/i18n/locale";
 import type { CheckItem } from "@/lib/crypto/types";
 import { checklistPassCount } from "@/lib/crypto/checklist";
 
 export function ChecklistCard({ items }: { items: CheckItem[] }) {
+  const { tr } = useI18n();
   const { pass, fail, unknown } = checklistPassCount(items);
   return (
     <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-6">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h3 className="text-base font-medium text-fg">چک‌لیست ورود اسپات</h3>
+          <h3 className="text-base font-medium text-fg">{tr("چک‌لیست ورود اسپات", "Spot entry checklist")}</h3>
           <p className="mt-1 text-xs text-subtle">
-            پنج قاعده ثابت. سبز یعنی شرط برقرار است، نه اینکه معامله تضمین شده باشد.
+            {tr(
+              "پنج قاعده ثابت. سبز یعنی شرط برقرار است، نه اینکه معامله تضمین شده باشد.",
+              "Five fixed rules. Green means the condition holds, not that the trade is guaranteed.",
+            )}
           </p>
         </div>
         <p className="num text-xs text-muted">
-          {pass} از {items.length}
-          {unknown ? ` · ${unknown} نامشخص` : ""}
-          {fail ? ` · ${fail} رد` : ""}
+          {pass} {tr("از", "of")} {items.length}
+          {unknown ? (
+            <>
+              {" · "}
+              {unknown} {tr("نامشخص", "unknown")}
+            </>
+          ) : null}
+          {fail ? (
+            <>
+              {" · "}
+              {fail} {tr("رد", "failed")}
+            </>
+          ) : null}
         </p>
       </div>
       <ul className="mt-5 flex flex-col gap-3">
@@ -27,9 +42,9 @@ export function ChecklistCard({ items }: { items: CheckItem[] }) {
           >
             <StatusIcon ok={item.ok} />
             <div className="min-w-0">
-              <p className="text-sm text-fg">{item.label}</p>
-              <p className="mt-0.5 text-xs text-subtle">{item.desired}</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted">{item.detail}</p>
+              <p className="text-sm text-fg">{tr(item.label)}</p>
+              <p className="mt-0.5 text-xs text-subtle">{tr(item.desired)}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">{tr(item.detail)}</p>
             </div>
           </li>
         ))}
