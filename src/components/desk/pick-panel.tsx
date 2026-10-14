@@ -7,6 +7,8 @@ import {
   dominanceTitle,
   regimeTitle,
 } from "@/lib/crypto/explain";
+import { verdictSentence } from "@/lib/crypto/verdict";
+import { useI18n } from "@/lib/i18n/locale";
 import { Badge } from "@/components/ui/badge";
 import { BtcPairChart } from "./btc-chart";
 import { ChecklistCard } from "./checklist-card";
@@ -29,19 +31,24 @@ export function PickPanel({
   result: AnalysisResult;
   live?: Record<string, number>;
 }) {
-  const { pick, runnerUp } = result;
+  const { pick, runnerUp, verdict } = result;
+  const { tr } = useI18n();
+  const focus =
+    verdict.symbol != null
+      ? (result.top.find((row) => row.symbol === verdict.symbol) ?? pick)
+      : pick;
   const confTone =
     result.confidence === "high" ? "up" : result.confidence === "low" ? "down" : "neutral";
   const coverage =
     result.klinesTried > 0
       ? Math.round((result.klinesOk / result.universeSize) * 100)
       : 0;
-  const chartMode = pick.symbol === "BTC" ? "usd" : "pair";
-  const usdPath = pick.spotIndex;
+  const chartMode = focus.symbol === "BTC" ? "usd" : "pair";
+  const usdPath = focus.spotIndex;
   const chartSeries =
-    pick.symbol === "BTC" && usdPath && usdPath.length >= 5 ? usdPath : pick.pairSeries;
+    focus.symbol === "BTC" && usdPath && usdPath.length >= 5 ? usdPath : focus.pairSeries;
   const buy = findBestBuyPoint(chartSeries);
-  const livePrice = live?.[pick.symbol] ?? pick.priceUsd;
+  const livePrice = live?.[focus.symbol] ?? focus.priceUsd;
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,7 +56,9 @@ export function PickPanel({
         <Badge>{regimeTitle(result.regime)}</Badge>
         <Badge>
           دامیننس BTC
-          <span className="num ms-1">{result.btcDominance.toFixed(1)}٪</span>
+          <span className="num ms-1">
+            {result.btcDominance == null ? "—" : `${result.btcDominance.toFixed(1)}٪`}
+          </span>
         </Badge>
         <Badge
           tone={
@@ -70,51 +79,56 @@ export function PickPanel({
       </div>
 
       <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-7">
-                <p className="text-xs tracking-wide text-subtle">
-                  {result.spotBuys === "suspended"
-                    ? "خرید اسپات معلق است · پناهگاه"
-                    : result.spotBuys === "reduced"
-                      ? "بهترین خرید با نصف حجم"
-                      : "بهترین خرید اسپات الان"}
-                </p>
+        <p className="text-2xl font-medium tracking-tight text-fg md:text-3xl">
+          {tr(verdictSentence(verdict.kind))}
+        </p>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">{tr(verdict.reason)}</p>
+        {verdict.kind === "wait" && verdict.reachUsd != null && verdict.invalidationUsd != null ? (
+          <p className="mt-2 text-xs text-subtle">
+            {tr("رسیدن", "Reach")} <span className="num text-fg">${formatUsd(verdict.reachUsd)}</span>
+            {" · "}
+            {tr("ابطال", "Invalidation")}{" "}
+            <span className="num text-fg">${formatUsd(verdict.invalidationUsd)}</span>
+          </p>
+        ) : null}
         <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <CoinMark symbol={pick.symbol} name={pick.name} rank={pick.rank} size="lg" />
+          <CoinMark symbol={focus.symbol} name={focus.name} rank={focus.rank} size="lg" />
           <div className="text-start md:text-end">
-            <p className="text-xs text-subtle">امتیاز اسپات</p>
+            <p className="text-xs text-subtle">{tr("امتیاز اسپات", "Spot score")}</p>
             <FlashValue
-              id={`score:${pick.symbol}`}
-              value={pick.score}
+              id={`score:${focus.symbol}`}
+              value={focus.score}
               format={formatScore}
               className="text-4xl font-medium tracking-tight text-fg"
             />
           </div>
         </div>
 
-        {pick.narrativeTagsFa[0] ? (
-          <p className="mt-4 text-xs text-subtle">{pick.narrativeTagsFa[0]}</p>
+        {focus.narrativeTagsFa[0] ? (
+          <p className="mt-4 text-xs text-subtle">{focus.narrativeTagsFa[0]}</p>
         ) : null}
         <dl className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="قیمت دلار" value={`$${formatUsd(livePrice)}`} liveId={`px:${pick.symbol}`} liveValue={livePrice} />
-          <Stat label="قیمت به بیت‌کوین" value={btcPriceLabel(pick.priceBtc)} />
+          <Stat label="قیمت دلار" value={`$${formatUsd(livePrice)}`} liveId={`px:${focus.symbol}`} liveValue={livePrice} />
+          <Stat label="قیمت به بیت‌کوین" value={btcPriceLabel(focus.priceBtc)} />
           <Stat
             label="۷ روز vs BTC"
-            value={formatPct(pick.rs7d)}
-            tone={toneFor(pick.rs7d)}
+            value={formatPct(focus.rs7d)}
+            tone={toneFor(focus.rs7d)}
           />
           <Stat
             label="۳۰ روز vs BTC"
-            value={pick.rs30d == null ? "—" : formatPct(pick.rs30d)}
-            tone={pick.rs30d == null ? "neutral" : toneFor(pick.rs30d)}
+            value={focus.rs30d == null ? "—" : formatPct(focus.rs30d)}
+            tone={focus.rs30d == null ? "neutral" : toneFor(focus.rs30d)}
           />
           <Stat
             label="MC / FDV"
-            value={pick.mcFdv == null ? "—" : `${(pick.mcFdv * 100).toFixed(0)}٪`}
+            value={focus.mcFdv == null ? "—" : `${(focus.mcFdv * 100).toFixed(0)}٪`}
             tone={
-              pick.mcFdv == null
+              focus.mcFdv == null
                 ? "neutral"
-                : pick.mcFdv >= 0.7
+                : focus.mcFdv >= 0.7
                   ? "up"
-                  : pick.mcFdv < 0.5
+                  : focus.mcFdv < 0.5
                     ? "down"
                     : "neutral"
             }
@@ -122,16 +136,16 @@ export function PickPanel({
           <Stat
             label="EMA ۲۰۰"
             value={
-              pick.aboveEma200 === true
+              focus.aboveEma200 === true
                 ? "بالا"
-                : pick.aboveEma200 === false
+                : focus.aboveEma200 === false
                   ? "پایین"
                   : "—"
             }
             tone={
-              pick.aboveEma200 === true
+              focus.aboveEma200 === true
                 ? "up"
-                : pick.aboveEma200 === false
+                : focus.aboveEma200 === false
                   ? "down"
                   : "neutral"
             }
@@ -139,33 +153,33 @@ export function PickPanel({
           <Stat
             label="ساختار هفتگی"
             value={
-              pick.weeklyStructure === "bull"
+              focus.weeklyStructure === "bull"
                 ? "صعودی"
-                : pick.weeklyStructure === "bear"
+                : focus.weeklyStructure === "bear"
                   ? "نزولی"
-                  : pick.weeklyStructure === "range"
+                  : focus.weeklyStructure === "range"
                     ? "رنج"
                     : "—"
             }
           />
           <Stat
             label="گردش ۲۴س"
-            value={`${(pick.turnover * 100).toFixed(2)}٪`}
-            tone={pick.turnover >= 0.02 ? "up" : "neutral"}
+            value={`${(focus.turnover * 100).toFixed(2)}٪`}
+            tone={focus.turnover >= 0.02 ? "up" : "neutral"}
           />
         </dl>
 
         <p className="mt-5 max-w-3xl text-sm leading-relaxed text-muted">
           {result.confidenceNote}
         </p>
-        {result.books.find((book) => book.symbol === pick.symbol) ? (
+        {result.books.find((book) => book.symbol === focus.symbol) ? (
           <p className="mt-3 max-w-3xl text-xs leading-relaxed text-subtle">
-            {result.books.find((book) => book.symbol === pick.symbol)?.note}
+            {result.books.find((book) => book.symbol === focus.symbol)?.note}
           </p>
         ) : null}
       </section>
 
-      <RiskBreakdown row={pick} />
+      <RiskBreakdown row={focus} />
 
       <ChecklistCard items={result.checklist} />
 
@@ -209,22 +223,26 @@ export function PickPanel({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-base font-medium text-fg">
-                {chartMode === "usd" ? "قیمت دلاری بیت‌کوین · ۳۰ روز" : `جفت ${pick.symbol}/BTC · ۳۰ روز`}
+                {chartMode === "usd" ? "قیمت دلاری بیت‌کوین · ۳۰ روز" : `جفت ${focus.symbol}/BTC · ۳۰ روز`}
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-subtle">
-                {chartMode === "usd"
-                  ? "۱۰۰ = شروع بازه. علامت BUY بهترین اصلاح این مسیر است."
-                  : "۱۰۰ = شروع بازه. بالای ۱۰۰ یعنی از بیت‌کوین جلو افتاده. BUY بهترین نقطه خرید همین ارز است."}
+                {verdict.kind !== "buy"
+                  ? chartMode === "usd"
+                    ? "۱۰۰ = شروع بازه."
+                    : "۱۰۰ = شروع بازه. بالای ۱۰۰ یعنی از بیت‌کوین جلو افتاده."
+                  : chartMode === "usd"
+                    ? "۱۰۰ = شروع بازه. علامت BUY بهترین اصلاح این مسیر است."
+                    : "۱۰۰ = شروع بازه. بالای ۱۰۰ یعنی از بیت‌کوین جلو افتاده. BUY بهترین نقطه خرید همین ارز است."}
               </p>
             </div>
             <span className="num shrink-0 rounded-sm bg-fg px-2 py-1 text-xs text-bg">
-              {pick.symbol}
+              {focus.symbol}
             </span>
           </div>
           <div className="mt-4">
-            <BtcPairChart data={chartSeries} symbol={pick.symbol} buy={buy} mode={chartMode} />
+            <BtcPairChart data={chartSeries} symbol={focus.symbol} buy={verdict.kind === "buy" ? buy : null} mode={chartMode} />
           </div>
-          {buy ? (
+          {verdict.kind === "buy" && buy ? (
             <div className="mt-4 rounded-md bg-elevated px-3 py-3">
               <p className="text-sm text-fg">
                 {buy.flat
@@ -252,19 +270,19 @@ export function PickPanel({
                 )}
               </p>
             </div>
-          ) : (
+          ) : verdict.kind === "buy" ? (
             <p className="mt-4 text-xs text-subtle">سری قیمت برای علامت‌گذاری نقطه خرید کافی نبود.</p>
-          )}
+          ) : null}
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
             <p className="text-muted">
               RSI ۱۴روزه:{" "}
               <span className="num text-fg">
-                {pick.rsi14 == null ? "—" : pick.rsi14.toFixed(0)}
+                {focus.rsi14 == null ? "—" : focus.rsi14.toFixed(0)}
               </span>
             </p>
             <p className="text-muted">
               ۷ روز دلار:{" "}
-              <span className="num text-fg">{formatPctPoints(pick.pct7d)}</span>
+              <span className="num text-fg">{formatPctPoints(focus.pct7d)}</span>
             </p>
           </div>
         </section>
@@ -276,7 +294,7 @@ export function PickPanel({
           هفت فاکتور از ۰ تا ۱۰۰. وزن‌ها ثابت‌اند تا مدل قابل‌حسابرسی باشد.
         </p>
         <div className="mt-5">
-          <FactorBars factors={pick.factors} />
+          <FactorBars factors={focus.factors} />
         </div>
       </section>
     </div>

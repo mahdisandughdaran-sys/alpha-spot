@@ -3,19 +3,20 @@ import { candidateBases } from "./exclusions.ts";
 import type { Horizon } from "./lens.ts";
 import type { Opportunity } from "./opportunity.ts";
 import { pickWinner } from "./scoring.ts";
-import type { BtcKillSwitch, CoinRow, Regime } from "./types.ts";
+import type { BtcKillSwitch, CoinRow, Regime, SpotVerdict, VerdictKind } from "./types.ts";
 
-export type VerdictKind = "buy" | "wait" | "stay";
+export type { SpotVerdict, VerdictKind };
 
-export type SpotVerdict = {
-  kind: VerdictKind;
-  symbol: string | null;
-  name: string | null;
-  priceUsd: number | null;
-  reachUsd: number | null;
-  invalidationUsd: number | null;
-  reason: string;
-};
+export function verdictSentence(kind: VerdictKind): string {
+  if (kind === "buy") return msg("الان این را بخر", "Buy this now");
+  if (kind === "wait") {
+    return msg(
+      "این بهترین نام است ولی هنوز وقت خریدش نیست",
+      "This is the best name, but it is not time to buy it yet",
+    );
+  }
+  return msg("الان هیچ آلتی نخر؛ بیت‌کوین بماند", "Do not buy any alt now; stay in Bitcoin");
+}
 
 function stay(reason: string): SpotVerdict {
   return {
@@ -120,7 +121,16 @@ export function buildVerdict(input: {
     );
   }
 
-  if (!isListed(pick.symbol, input.listed)) {
+  if (pick.symbol !== "BTC" && input.listed == null) {
+    return stay(
+      msg(
+        "فهرست تأیید نشد؛ خرید آلت صادر نمی‌شود.",
+        "The exchange list was not confirmed, so no alt buy is issued.",
+      ),
+    );
+  }
+
+  if (pick.symbol !== "BTC" && !isListed(pick.symbol, input.listed)) {
     return stay(
       msg(
         `${pick.symbol} در صرافی انتخاب‌شده تأیید نشد، پس خرید آلت صادر نمی‌شود.`,

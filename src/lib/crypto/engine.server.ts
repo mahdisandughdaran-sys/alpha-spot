@@ -17,13 +17,16 @@ import { applyBookGate } from "./microstructure.ts";
 import { loadTopBooks } from "./microstructure.server.ts";
 import { emptyOpportunityBoard, scanOpportunities, type SpotBar } from "./opportunity.ts";
 import { fromBinanceTickers, fromCoinGecko } from "./universe-fallback.ts";
+import { applyLens, type Horizon, type WeightCuts } from "./lens.ts";
+import { loadVenueListing } from "./listings.server.ts";
+import { buildVerdict } from "./verdict.ts";
+import type { VenueId } from "./venues.ts";
 import { msg } from "@/lib/i18n/lex";
 import type { AnalysisResult, BookCheck, CoinDraft, DataCache, PairPoint, UnlockAssessment } from "./types.ts";
 
 const PAPRIKA = "https://api.coinpaprika.com/v1";
 const BINANCE = "https://data-api.binance.vision/api/v3";
 const CACHE_MS = 2 * 60 * 1000;
-const ANALYSIS_KEY = "analysis:spot:v5";
 const ANALYSIS_FRESH = 2 * 60;
 const ANALYSIS_STALE = 6 * 60 * 60;
 const KLINE_FRESH = 6 * 60 * 60;
@@ -62,7 +65,22 @@ type PaprikaGlobal = {
 };
 
 type CacheBox = { at: number; value: AnalysisResult };
-let cache: CacheBox | null = null;
+const memory = new Map<string, CacheBox>();
+
+export type DeskRun = {
+  venue: VenueId;
+  horizon: Horizon;
+  cuts?: WeightCuts;
+};
+
+function cacheKey(run: DeskRun): string {
+  const cuts = run.cuts ?? {};
+  const packed = (Object.keys(cuts) as (keyof WeightCuts)[])
+    .sort()
+    .map((key) => `${key}:${Number(cuts[key]).toFixed(4)}`)
+    .join(",");
+  return `analysis:spot:v6:${run.venue}:${run.horizon}:${packed}`;
+}
 
 async function fetchJson<T>(url: string, ms = 14000): Promise<T> {
   const ctrl = new AbortController();
@@ -242,12 +260,14 @@ function barsOf(parsed: ParsedKlines): SpotBar[] {
   return out;
 }
 
-async function readStoredAnalysis(maxAgeSec: number): Promise<AnalysisResult | null> {
-  const raw = await readCache(ANALYSIS_KEY, maxAgeSec);
+async function readStoredAnalysis(key: string, maxAgeSec: number): Promise<AnalysisResult | null> {
+  const raw = await readCache(key, maxAgeSec);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as AnalysisResult;
     if (!parsed?.pick?.symbol || !parsed.killSwitch || !parsed.opportunities?.items) return null;
+    const kind = parsed.verdict?.kind;
+    if (kind !== "buy" && kind !== "wait" && kind !== "stay") return null;
     parsed.cacheRows = parsed.cacheRows ?? 0;
     parsed.cacheKlines = parsed.cacheKlines ?? 0;
     return parsed;
@@ -256,31 +276,33 @@ async function readStoredAnalysis(maxAgeSec: number): Promise<AnalysisResult | n
   }
 }
 
-export async function runAnalysis(): Promise<AnalysisResult> {
+export async function runAnalysis(run: DeskRun): Promise<AnalysisResult> {
+  const key = cacheKey(run);
   const now = Date.now();
-  if (cache && now - cache.at < CACHE_MS) {
-    return { ...cache.value, dataCache: "memory" };
+  const hit = memory.get(key);
+  if (hit && now - hit.at < CACHE_MS) {
+    return { ...hit.value, dataCache: "memory" };
   }
-  const storedFresh = await readStoredAnalysis(ANALYSIS_FRESH);
+  const storedFresh = await readStoredAnalysis(key, ANALYSIS_FRESH);
   if (storedFresh) {
     storedFresh.dataCache = "stored";
-    cache = { at: now, value: storedFresh };
+    memory.set(key, { at: now, value: storedFresh });
     return storedFresh;
   }
   try {
-    const result = await computeAnalysis();
-    cache = { at: Date.now(), value: result };
-    await writeCache(ANALYSIS_KEY, JSON.stringify(result));
+    const result = await computeAnalysis(run);
+    memory.set(key, { at: Date.now(), value: result });
+    await writeCache(key, JSON.stringify(result));
     return result;
   } catch (err) {
-    const stale = await readStoredAnalysis(ANALYSIS_STALE);
+    const stale = await readStoredAnalysis(key, ANALYSIS_STALE);
     if (stale) {
       stale.dataCache = "stored";
       stale.caution = [
         "داده زنده ناقص بود؛ آخرین تحلیل ذخیره‌شده نشان داده می‌شود.",
         ...stale.caution,
       ].slice(0, 6);
-      cache = { at: Date.now(), value: stale };
+      memory.set(key, { at: Date.now(), value: stale });
       return stale;
     }
     throw err instanceof Error ? err : new Error("تحلیل انجام نشد.");
@@ -334,7 +356,8 @@ async function loadUniverse(): Promise<{
   };
 }
 
-async function computeAnalysis(): Promise<AnalysisResult> {
+async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
+  const listingPromise = loadVenueListing(run.venue);
   const loaded = await loadUniverse();
   const tickers = loaded.tickers;
   const btcTicker = tickers.find((t) => t.symbol === "BTC");
@@ -542,31 +565,30 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   scored = scored
     .map((row) => applyBookGate(row, bookBy.get(row.symbol)))
     .sort((a, b) => b.score - a.score);
-  let { pick, runnerUp } = pickWinner(scored, regime, killSwitch);
-  if (!pick) {
-    const btcRow = scored.find((row) => row.symbol === "BTC");
-    if (!btcRow) throw new Error("داده بیت‌کوین در دسترس نیست");
+  scored = applyLens(scored, run.horizon, run.cuts).sort((a, b) => b.score - a.score);
+  const decision = pickWinner(scored, regime, killSwitch);
+  let pick = decision.pick;
+  let runnerUp = decision.runnerUp;
+  const btcRow = scored.find((row) => row.symbol === "BTC");
+  if (!btcRow) throw new Error("داده بیت‌کوین در دسترس نیست");
+  if (pick && bookBy.get(pick.symbol)?.gate === "thin" && pick.symbol !== "BTC") {
+    runnerUp = pick;
     pick = btcRow;
-    runnerUp = null;
   }
+  const shown = pick ?? btcRow;
   const rejected = books.filter((book) => book.gate === "thin").map((book) => book.symbol);
-  if (bookBy.get(pick.symbol)?.gate === "thin") {
-    const btcRow = scored.find((row) => row.symbol === "BTC");
-    if (btcRow && pick.symbol !== "BTC") {
-      runnerUp = pick;
-      pick = btcRow;
-    }
-  }
-  const pickBook = bookBy.get(pick.symbol);
-  const conf = confidenceOf(pick, runnerUp, pick.hasKlines, klinesOk, drafts.length);
-  const { reasons, caution } = explainPick(
-    pick,
+  const pickBook = bookBy.get(shown.symbol);
+  const conf = confidenceOf(shown, runnerUp, shown.hasKlines, klinesOk, drafts.length);
+  const explained = explainPick(
+    shown,
     runnerUp,
     regime,
     regimeNote,
     btcPct7d,
     { klinesOk, klinesTried: drafts.length, dominanceNote: dom.note },
   );
+  const reasons = explained.reasons;
+  const caution = explained.caution;
   if (!btcParsed) {
     caution.unshift(
       loaded.source === "CoinPaprika"
@@ -593,9 +615,9 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   if (killSwitch.active) {
     caution.unshift(killSwitch.note);
   }
-  if (pick.highDilution) {
+  if (shown.highDilution) {
     caution.unshift(
-      `${pick.symbol} برچسب High Dilution Risk دارد و ${pick.unlockPenalty} امتیاز از نمره کل کم شده است.`,
+      `${shown.symbol} برچسب High Dilution Risk دارد و ${shown.unlockPenalty} امتیاز از نمره کل کم شده است.`,
     );
   }
   if (unlockSource === "unavailable") {
@@ -603,7 +625,7 @@ async function computeAnalysis(): Promise<AnalysisResult> {
       "تقویم آزادسازی الان در دسترس نبود؛ جریمه کلیف اعمال نشد. تحلیل قیمتی همچنان معتبر است.",
     );
   }
-  const checklist = buildChecklist(pick, {
+  const checklist = buildChecklist(shown, {
     regime,
     btcDominance: loaded.dominance,
     dominanceBias: dom.bias,
@@ -647,6 +669,30 @@ async function computeAnalysis(): Promise<AnalysisResult> {
     );
   }
 
+  const listing = await listingPromise;
+  const listed = listing.ok ? new Set(listing.bases) : null;
+  const verdict = buildVerdict({
+    ranked: scored,
+    regime,
+    kill: killSwitch,
+    opportunities: opportunities.items,
+    listed,
+    horizon: run.horizon,
+  });
+  if (decision.refused) {
+    reasons.splice(0, reasons.length, verdict.reason);
+  } else if (!reasons.includes(verdict.reason)) {
+    reasons.unshift(verdict.reason);
+  }
+  if (!listing.ok && !verdict.reason.includes("فهرست تأیید نشد")) {
+    caution.unshift(
+      msg(
+        "فهرست تأیید نشد؛ خرید آلت صادر نمی‌شود.",
+        "The exchange list was not confirmed, so no alt buy is issued.",
+      ),
+    );
+  }
+
   const result: AnalysisResult = {
     generatedAt,
     sources: [
@@ -673,8 +719,14 @@ async function computeAnalysis(): Promise<AnalysisResult> {
     spotBuys: killSwitch.spotBuys,
     unlockSource,
     unlockMatched,
-    pick,
+    pick: shown,
     runnerUp,
+    viaSeasonRule: decision.viaSeasonRule,
+    refused: decision.refused,
+    verdict,
+    listingOk: listing.ok,
+    horizon: run.horizon,
+    venue: run.venue,
     top: scored,
     reasons,
     caution: caution.slice(0, 6),

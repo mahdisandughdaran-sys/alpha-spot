@@ -111,6 +111,18 @@ export type CoinRow = {
   factors: FactorScore[];
 };
 
+export type VerdictKind = "buy" | "wait" | "stay";
+
+export type SpotVerdict = {
+  kind: VerdictKind;
+  symbol: string | null;
+  name: string | null;
+  priceUsd: number | null;
+  reachUsd: number | null;
+  invalidationUsd: number | null;
+  reason: string;
+};
+
 export type Regime = "btc" | "alt" | "neutral";
 export type Confidence = "high" | "medium" | "low";
 export type DominanceBias = "rising" | "falling" | "resistance" | "neutral";
@@ -159,8 +171,17 @@ export type AnalysisResult = {
   spotBuys: BuySignal;
   unlockSource: "coinmarketcap" | "unavailable";
   unlockMatched: number;
+  /** Required row for the rest of the desk. Empty pickWinner is not rewritten into a Bitcoin win. */
   pick: CoinRow;
   runnerUp: CoinRow | null;
+  /** True only when pickWinner itself forced Bitcoin in Bitcoin season. */
+  viaSeasonRule: boolean;
+  /** True when pickWinner refused: kill-switch, or nobody cleared the spot gate. */
+  refused: boolean;
+  verdict: SpotVerdict;
+  listingOk: boolean;
+  horizon: "week" | "month";
+  venue: "nobitex" | "wallex" | "ompfinex" | "binance" | "bybit";
   top: CoinRow[];
   reasons: string[];
   caution: string[];

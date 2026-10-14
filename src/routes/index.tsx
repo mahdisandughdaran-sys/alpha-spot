@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, LoaderCircle } from "lucide-react";
@@ -11,6 +11,8 @@ import { Leaderboard } from "@/components/desk/leaderboard";
 import { LiveBadge } from "@/components/desk/live-badge";
 import { LocaleSwitch } from "@/components/desk/locale-switch";
 import { Methodology } from "@/components/desk/methodology";
+import { PrefsGate } from "@/components/desk/prefs-gate";
+import { ReportCard } from "@/components/desk/report-card";
 import { MonitorPanel } from "@/components/desk/monitor-panel";
 import { PickPanel } from "@/components/desk/pick-panel";
 import { PortfolioPanel } from "@/components/desk/portfolio-panel";
@@ -25,6 +27,21 @@ import { VenuePanel } from "@/components/desk/venue-panel";
 import { OpportunityPanel } from "@/components/desk/opportunity-panel";
 import { ConfluencePanel } from "@/components/desk/confluence-panel";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
+import type { WeightCuts } from "@/lib/crypto/lens";
+import { loadPrefs, savePrefs, type DeskPrefs } from "@/lib/crypto/prefs";
+import {
+  loadCuts,
+  loadSuggestions,
+  regimeBuckets,
+  rememberSuggestion,
+  saveCuts,
+  saveSuggestions,
+  settleReport,
+  type RegimeBucket,
+  type StoredSuggestion,
+} from "@/lib/crypto/report-card";
+import { verdictSentence } from "@/lib/crypto/verdict";
+import { VENUE_LABEL } from "@/lib/crypto/venues";
 import {
   hasSeen,
   loadDeskSettings,
@@ -47,7 +64,7 @@ import {
   saveOppAlerts,
   saveOppSnapshot,
 } from "@/lib/crypto/opportunity-alerts";
-import type { AnalysisResult } from "@/lib/crypto/types";
+import type { AnalysisResult, FactorKey } from "@/lib/crypto/types";
 import { applyDeskFilter, type DeskFilter } from "@/lib/crypto/risk-view";
 import { formatUsd } from "@/components/desk/format";
 import { plain, msg } from "@/lib/i18n/lex";
@@ -75,6 +92,16 @@ function Home() {
   const [sync, setSync] = useState<"connecting" | "live" | "delayed">("connecting");
   const [lens, setLens] = useState<DeskFilter>("all");
   const [flowOnly, setFlowOnly] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [prefs, setPrefs] = useState<DeskPrefs | null>(null);
+  const [report, setReport] = useState<{
+    rows: StoredSuggestion[];
+    buckets: RegimeBucket[];
+    cuts: WeightCuts;
+    lagged: boolean;
+    weak: FactorKey | null;
+  } | null>(null);
+  const booted = useRef(false);
 
   const stages = [
     tr("گرفتن رتبه، عرضه و حجم صد ارز برتر", "Fetching rank, supply, and volume for the top 100"),
@@ -87,6 +114,15 @@ function Home() {
   useEffect(() => {
     setHistory(loadHistory());
     setWatched(loadWatch());
+    const saved = loadPrefs();
+    setPrefs(saved);
+    setReady(true);
+    if (saved && !booted.current) {
+      booted.current = true;
+      void onAnalyze(saved);
+    }
+    // Boot once: prefs live in localStorage and the first ranking waits on them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const quoteSymbols = useMemo(() => {
@@ -310,18 +346,85 @@ function Home() {
     return () => window.clearInterval(id);
   }, [quotes, sendAlert]);
 
-  async function onAnalyze() {
+  async function settleStored(): Promise<WeightCuts> {
+    const rows = loadSuggestions();
+    let cuts = loadCuts();
+    const day = 86_400_000;
+    const now = Date.now();
+    const due = rows.some((row) => {
+      const age = now - Date.parse(row.at);
+      return (!row.applied7 && age >= 7 * day) || (!row.applied30 && age >= 30 * day);
+    });
+    if (!due) return cuts;
+    try {
+      const symbols = [...new Set([...rows.map((row) => row.symbol), "BTC"])].slice(0, 40);
+      const liveRows = await quotes({ data: { symbols } });
+      const priceOf = (symbol: string) => liveRows.find((row) => row.symbol === symbol)?.price ?? null;
+      const btcNow = priceOf("BTC");
+      if (btcNow == null) return cuts;
+      const settled = settleReport(rows, priceOf, btcNow, cuts);
+      saveSuggestions(settled.rows);
+      saveCuts(settled.cuts);
+      cuts = settled.cuts;
+    } catch {
+      /* قیمت لحظه‌ای نیامد؛ قیمت تحلیل همین بازدید تسویه می‌کند */
+    }
+    return cuts;
+  }
+
+  function rememberAndSnapshot(data: AnalysisResult) {
+    const verdict = data.verdict;
+    const symbol = verdict.symbol ?? "BTC";
+    const row = data.top.find((item) => item.symbol === symbol) ?? data.pick;
+    const stored: StoredSuggestion = {
+      id: `${data.generatedAt}:${verdict.kind}:${symbol}`,
+      at: data.generatedAt,
+      symbol,
+      name: verdict.name ?? row.name,
+      priceUsd: verdict.kind === "stay" ? data.btcPriceUsd : (verdict.priceUsd ?? row.priceUsd),
+      btcPriceUsd: data.btcPriceUsd,
+      kind: verdict.kind,
+      regime: data.regime,
+      factors: row.factors.map((factor) => ({ key: factor.key, score: factor.score })),
+      applied7: false,
+      applied30: false,
+    };
+    const saved = rememberSuggestion(loadSuggestions(), stored);
+    saveSuggestions(saved);
+    const cuts = loadCuts();
+    const priceOf = (sym: string) => {
+      if (sym === "BTC") return data.btcPriceUsd;
+      return data.top.find((item) => item.symbol === sym)?.priceUsd ?? null;
+    };
+    const settled = settleReport(saved, priceOf, data.btcPriceUsd, cuts);
+    saveSuggestions(settled.rows);
+    saveCuts(settled.cuts);
+    return {
+      rows: settled.rows,
+      buckets: regimeBuckets(settled.rows, priceOf, data.btcPriceUsd),
+      cuts: settled.cuts,
+      lagged: settled.lagged,
+      weak: settled.weak,
+    };
+  }
+
+  async function onAnalyze(current?: DeskPrefs) {
+    const desk = current ?? prefs;
+    if (!desk) return;
     setStatus("loading");
     setError(null);
     setStage(0);
     setTab("pick");
+    setFlowOnly(false);
     const timer = window.setInterval(() => {
       setStage((s) => Math.min(s + 1, stages.length - 1));
     }, 1100);
     try {
-      const data = await run();
+      const cuts = await settleStored();
+      const data = await run({ data: { venue: desk.venue, horizon: desk.horizon, cuts } });
       setResult(data);
       setHistory(saveRun(data));
+      setReport(rememberAndSnapshot(data));
       setStatus("done");
     } catch (err) {
       setStatus("error");
@@ -329,6 +432,13 @@ function Home() {
     } finally {
       window.clearInterval(timer);
     }
+  }
+
+  function commitPrefs(next: DeskPrefs) {
+    savePrefs(next);
+    setPrefs(next);
+    booted.current = true;
+    void onAnalyze(next);
   }
 
   const headerMeta = useMemo(() => {
@@ -359,16 +469,55 @@ function Home() {
             </div>
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-2xl">
+            <div className="max-w-3xl">
               <h1 className="text-4xl font-medium tracking-tight text-fg md:text-5xl">
-                {tr("آلفا اسپات", "Alpha Spot")}
+                {result ? tr(verdictSentence(result.verdict.kind)) : tr("آلفا اسپات", "Alpha Spot")}
               </h1>
-              <p className="mt-3 text-base leading-relaxed text-muted">
-                {tr(
-                  "هر ارز با نمادش دیده می‌شود. مدل صد دارایی اول را در برابر بیت‌کوین می‌سنجد، و میز همگرایی جریان حجم، نقشه لیکوییدیشن و حجم مجاز خرید را روی همان نماد حساب می‌کند.",
-                  "Every asset is shown with its ticker. The model ranks the top 100 against Bitcoin, and the desk scores volume confluence, the liquidation map, and a buy size on that same ticker.",
-                )}
-              </p>
+              {result ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  <p className="text-base leading-relaxed text-muted">{tr(result.verdict.reason)}</p>
+                  {result.verdict.symbol ? (
+                    <p className="text-sm text-fg">
+                      <span className="num">{result.verdict.symbol}</span>
+                      {result.verdict.name ? ` · ${result.verdict.name}` : ""}
+                      {result.verdict.priceUsd != null ? ` · $${formatUsd(result.verdict.priceUsd)}` : ""}
+                    </p>
+                  ) : null}
+                  {result.verdict.kind === "wait" && result.verdict.reachUsd != null && result.verdict.invalidationUsd != null ? (
+                    <p className="text-xs text-subtle">
+                      {tr("رسیدن", "Reach")} <span className="num text-fg">${formatUsd(result.verdict.reachUsd)}</span>
+                      {" · "}
+                      {tr("ابطال", "Invalidation")}{" "}
+                      <span className="num text-fg">${formatUsd(result.verdict.invalidationUsd)}</span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-3 text-base leading-relaxed text-muted">
+                  {tr(
+                    "یک جمله: بخر، صبر کن، یا در بیت‌کوین بمان. صرافی و افق را بگویید تا همان جمله ساخته شود.",
+                    "One sentence: buy, wait, or stay in Bitcoin. Say the exchange and the horizon, and that sentence is built.",
+                  )}
+                </p>
+              )}
+              {prefs ? (
+                <p className="mt-3 text-xs text-subtle">
+                  {tr(VENUE_LABEL[prefs.venue])}
+                  {" · "}
+                  {prefs.horizon === "week" ? tr("یک هفته", "One week") : tr("یک ماه", "One month")}
+                  <button
+                    type="button"
+                    className="ms-3 text-fg"
+                    onClick={() => {
+                      setPrefs(null);
+                      setStatus("idle");
+                      setFlowOnly(false);
+                    }}
+                  >
+                    {tr("تغییر صرافی یا افق", "Change exchange or horizon")}
+                  </button>
+                </p>
+              ) : null}
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
               <Button
@@ -377,28 +526,31 @@ function Home() {
                 onClick={() => {
                   setFlowOnly(true);
                   setTab("flow");
+                  setStatus((prev) => (prev === "done" ? prev : "idle"));
                 }}
                 className="h-12 min-w-44"
               >
                 {tr("همگرایی حجم", "Volume confluence")}
               </Button>
-              <Button
-                size="lg"
-                onClick={onAnalyze}
-                disabled={status === "loading"}
-                className="h-12 min-w-52"
-              >
-              {status === "loading" ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" />
-                  {tr("در حال تحلیل", "Analyzing")}
-                </>
-              ) : result ? (
-                tr("تحلیل دوباره", "Run again")
-              ) : (
-                tr("تحلیل ۱۰۰ ارز برتر", "Rank the top 100")
-              )}
-            </Button>
+              {prefs ? (
+                <Button
+                  size="lg"
+                  onClick={() => void onAnalyze(prefs)}
+                  disabled={status === "loading"}
+                  className="h-12 min-w-52"
+                >
+                  {status === "loading" ? (
+                    <>
+                      <LoaderCircle className="size-4 animate-spin" />
+                      {tr("در حال تحلیل", "Analyzing")}
+                    </>
+                  ) : result ? (
+                    tr("تحلیل دوباره", "Run again")
+                  ) : (
+                    tr("تحلیل ۱۰۰ ارز برتر", "Rank the top 100")
+                  )}
+                </Button>
+              ) : null}
             </div>
           </div>
           {headerMeta ? <p className="text-xs text-subtle">{headerMeta}</p> : null}
@@ -414,7 +566,7 @@ function Home() {
           </div>
         ) : null}
 
-        {status === "idle" && !flowOnly ? <IdleState live={live} /> : null}
+        {ready && !prefs && status !== "loading" && !flowOnly ? <PrefsGate onSave={commitPrefs} /> : null}
 
         {status === "loading" ? (
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
@@ -435,7 +587,7 @@ function Home() {
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
             <p className="text-sm text-down">{tr("تحلیل کامل نشد", "The analysis did not finish")}</p>
             <p className="mt-2 text-sm text-muted">{error ? tr(error) : null}</p>
-            <Button className="mt-4" onClick={onAnalyze}>
+            <Button className="mt-4" onClick={() => void onAnalyze(prefs ?? undefined)}>
               {tr("تلاش دوباره", "Try again")}
             </Button>
           </section>
@@ -443,6 +595,15 @@ function Home() {
 
         {status === "done" && result ? (
           <>
+            {report && tab !== "method" ? (
+              <ReportCard
+                rows={report.rows}
+                buckets={report.buckets}
+                cuts={report.cuts}
+                lagged={report.lagged}
+                weak={report.weak}
+              />
+            ) : null}
             <KillSwitchBanner kill={result.killSwitch} />
             <AlertStrip rows={result.top} kill={result.killSwitch} />
             <QuickFilters
@@ -452,7 +613,11 @@ function Home() {
                 setTab("table");
               }}
             />
-            <SymbolTape rows={result.top} picked={result.pick.symbol} live={live} />
+            <SymbolTape
+              rows={result.top}
+              picked={result.verdict.kind === "stay" ? "" : (result.verdict.symbol ?? "")}
+              live={live}
+            />
             <nav className="flex gap-1 overflow-x-auto rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
               {(
                 [
@@ -491,7 +656,7 @@ function Home() {
             {tab === "table" ? (
               <Leaderboard
                 rows={applyDeskFilter(result.top, lens)}
-                picked={result.pick.symbol}
+                picked={result.verdict.kind === "stay" ? "" : (result.verdict.symbol ?? result.pick.symbol)}
                 watched={watched}
                 onToggleWatch={(symbol) => setWatched(toggleWatch(symbol))}
                 live={live}
@@ -511,7 +676,19 @@ function Home() {
             {tab === "depth" ? <DepthPanel books={result.books} /> : null}
             {tab === "execute" ? <ExecutePanel result={result} /> : null}
             {tab === "venue" ? <VenuePanel result={result} /> : null}
-            {tab === "method" ? <Methodology /> : null}
+            {tab === "method" && report ? (
+              <div className="grid items-start gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+                <Methodology />
+                <ReportCard
+                  rows={report.rows}
+                  buckets={report.buckets}
+                  cuts={report.cuts}
+                  lagged={report.lagged}
+                  weak={report.weak}
+                />
+              </div>
+            ) : null}
+            {tab === "method" && !report ? <Methodology /> : null}
             {tab === "history" ? <HistoryPanel runs={history} /> : null}
           </>
         ) : null}
