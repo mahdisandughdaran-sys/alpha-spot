@@ -13,7 +13,7 @@ export function buildChecklist(
   pick: CoinRow,
   ctx: {
     regime: Regime;
-    btcDominance: number;
+    btcDominance: number | null;
     dominanceBias: DominanceBias;
     kill?: BtcKillSwitch;
     book?: BookCheck;
@@ -74,10 +74,16 @@ export function buildChecklist(
       label: msg("دامیننس بیت‌کوین", "Bitcoin dominance"),
       desired: msg("کاهشی یا برخورد به مقاومت", "Falling, or a test of resistance"),
       ok: domOk,
-      detail: msg(
-        `دامیننس ${ctx.btcDominance.toFixed(1)}٪ · رژیم ${ctx.regime}`,
-        `Dominance ${ctx.btcDominance.toFixed(1)}% · regime ${ctx.regime}`,
-      ),
+      detail:
+        ctx.btcDominance == null
+          ? msg(
+              `دامیننس در این منبع نبود · رژیم ${ctx.regime}`,
+              `Dominance was not in this source · regime ${ctx.regime}`,
+            )
+          : msg(
+              `دامیننس ${ctx.btcDominance.toFixed(1)}٪ · رژیم ${ctx.regime}`,
+              `Dominance ${ctx.btcDominance.toFixed(1)}% · regime ${ctx.regime}`,
+            ),
     },
     {
       key: "liq",

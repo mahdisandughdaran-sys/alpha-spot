@@ -126,6 +126,10 @@ const ACCRUAL_FIX: Record<string, Accrual> = {
   JUP: "burn",
 };
 
+export function isCatalogued(symbol: string): boolean {
+  return Object.prototype.hasOwnProperty.call(META, symbol.toUpperCase());
+}
+
 export function lookupMeta(symbol: string): AssetMeta {
   const key = symbol.toUpperCase();
   const found = META[key];

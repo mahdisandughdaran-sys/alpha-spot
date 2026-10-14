@@ -143,7 +143,7 @@ export type Sleeve = {
 export type AnalysisResult = {
   generatedAt: string;
   sources: string[];
-  btcDominance: number;
+  btcDominance: number | null;
   btcPriceUsd: number;
   btcPct7d: number;
   btcPct30d: number | null;

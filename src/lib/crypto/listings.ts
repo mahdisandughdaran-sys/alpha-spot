@@ -1,0 +1,123 @@
+import type { VenueId } from "./venues.ts";
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function baseOf(value: unknown): string | null {
+  if (typeof value === "string" && /^[A-Za-z0-9]{2,15}$/.test(value)) return value.toUpperCase();
+  const row = asRecord(value);
+  if (!row) return null;
+  const raw = row.id ?? row.symbol ?? row.code ?? row.name;
+  return typeof raw === "string" ? baseOf(raw) : null;
+}
+
+function addBase(out: Set<string>, value: unknown) {
+  const base = baseOf(value);
+  if (base) out.add(base);
+}
+
+export function basesFromNobitex(payload: unknown): string[] | null {
+  const stats = asRecord(asRecord(payload)?.stats);
+  if (!stats) return null;
+  const out = new Set<string>();
+  for (const key of Object.keys(stats)) {
+    const base = key.split("-")[0];
+    if (base) addBase(out, base);
+  }
+  return out.size ? [...out] : null;
+}
+
+export function basesFromWallex(payload: unknown): string[] | null {
+  const result = asRecord(asRecord(payload)?.result) ?? asRecord(payload);
+  const symbols = result?.symbols ?? result?.markets ?? asRecord(payload)?.markets;
+  const out = new Set<string>();
+  const take = (row: unknown) => {
+    const rec = asRecord(row);
+    if (!rec) return;
+    addBase(out, rec.baseAsset ?? rec.base_asset ?? rec.base ?? rec.srcCurrency);
+  };
+  if (Array.isArray(symbols)) symbols.forEach(take);
+  else if (symbols && typeof symbols === "object") Object.values(symbols as Record<string, unknown>).forEach(take);
+  return out.size ? [...out] : null;
+}
+
+export function basesFromOmpfinex(payload: unknown): string[] | null {
+  const root = asRecord(payload);
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray(root?.data)
+      ? root.data
+      : Array.isArray(root?.markets)
+        ? root.markets
+        : Array.isArray(asRecord(root?.data)?.markets)
+          ? (asRecord(root?.data)?.markets as unknown[])
+          : null;
+  if (!list) return null;
+  const out = new Set<string>();
+  for (const item of list) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const direct = rec.base_currency ?? rec.baseCurrency ?? rec.baseAsset ?? rec.base ?? rec.from;
+    if (direct) addBase(out, direct);
+    else if (typeof rec.symbol === "string") {
+      const cut = rec.symbol.replace(/[-_/]?(USDT|IRT|IRR|TMN|RLS)$/i, "");
+      addBase(out, cut);
+    }
+  }
+  return out.size ? [...out] : null;
+}
+
+export function basesFromBinance(payload: unknown): string[] | null {
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(asRecord(payload)?.symbols)
+      ? (asRecord(payload)?.symbols as unknown[])
+      : null;
+  if (!rows) return null;
+  const out = new Set<string>();
+  for (const item of rows) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    if (typeof rec.baseAsset === "string") {
+      const quote = String(rec.quoteAsset ?? "");
+      const status = String(rec.status ?? "TRADING");
+      if (quote && quote !== "USDT") continue;
+      if (status && status !== "TRADING") continue;
+      addBase(out, rec.baseAsset);
+      continue;
+    }
+    const symbol = String(rec.symbol ?? "");
+    if (!symbol.endsWith("USDT")) continue;
+    addBase(out, symbol.slice(0, -4));
+  }
+  return out.size ? [...out] : null;
+}
+
+export function basesFromBybit(payload: unknown): string[] | null {
+  const result = asRecord(asRecord(payload)?.result);
+  const list = Array.isArray(result?.list) ? result.list : Array.isArray(payload) ? payload : null;
+  if (!list) return null;
+  const out = new Set<string>();
+  for (const item of list) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const quote = String(rec.quoteCoin ?? rec.quote ?? "USDT");
+    const status = String(rec.status ?? "Trading");
+    if (quote && quote !== "USDT") continue;
+    if (status && status !== "Trading") continue;
+    addBase(out, rec.baseCoin ?? rec.baseCoin ?? rec.base);
+    if (!rec.baseCoin && typeof rec.symbol === "string" && rec.symbol.endsWith("USDT")) {
+      addBase(out, rec.symbol.slice(0, -4));
+    }
+  }
+  return out.size ? [...out] : null;
+}
+
+export function parseVenueBases(venue: VenueId, payload: unknown): string[] | null {
+  if (venue === "nobitex") return basesFromNobitex(payload);
+  if (venue === "wallex") return basesFromWallex(payload);
+  if (venue === "ompfinex") return basesFromOmpfinex(payload);
+  if (venue === "binance") return basesFromBinance(payload);
+  return basesFromBybit(payload);
+}

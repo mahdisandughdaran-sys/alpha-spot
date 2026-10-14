@@ -16,6 +16,8 @@ import { readCache, readCachePrefix, writeCache, cacheHealth } from "./cache.ser
 import { applyBookGate } from "./microstructure.ts";
 import { loadTopBooks } from "./microstructure.server.ts";
 import { emptyOpportunityBoard, scanOpportunities, type SpotBar } from "./opportunity.ts";
+import { fromBinanceTickers, fromCoinGecko } from "./universe-fallback.ts";
+import { msg } from "@/lib/i18n/lex";
 import type { AnalysisResult, BookCheck, CoinDraft, DataCache, PairPoint, UnlockAssessment } from "./types.ts";
 
 const PAPRIKA = "https://api.coinpaprika.com/v1";
@@ -285,12 +287,56 @@ export async function runAnalysis(): Promise<AnalysisResult> {
   }
 }
 
-async function computeAnalysis(): Promise<AnalysisResult> {
-  const [tickers, global] = await Promise.all([
-    fetchJson<PaprikaTicker[]>(`${PAPRIKA}/tickers?quotes=USD,BTC&limit=180`),
-    fetchJson<PaprikaGlobal>(`${PAPRIKA}/global`),
-  ]);
+async function loadUniverse(): Promise<{
+  tickers: PaprikaTicker[];
+  dominance: number | null;
+  source: string;
+}> {
+  try {
+    const [tickers, global] = await Promise.all([
+      fetchJson<PaprikaTicker[]>(`${PAPRIKA}/tickers?quotes=USD,BTC&limit=180`),
+      fetchJson<PaprikaGlobal>(`${PAPRIKA}/global`),
+    ]);
+    if (!Array.isArray(tickers) || tickers.length === 0) throw new Error("empty");
+    return {
+      tickers,
+      dominance: global.bitcoin_dominance_percentage,
+      source: "CoinPaprika",
+    };
+  } catch {
+    /* CoinPaprika was down; try the next public list. */
+  }
+  try {
+    const [markets, global] = await Promise.all([
+      fetchJson<unknown>(
+        "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false&price_change_percentage=1h,24h,7d,30d",
+      ),
+      fetchJson<unknown>("https://api.coingecko.com/api/v3/global"),
+    ]);
+    const parsed = fromCoinGecko(markets, global);
+    if (parsed) {
+      return {
+        tickers: parsed.tickers as PaprikaTicker[],
+        dominance: parsed.dominance,
+        source: "CoinGecko",
+      };
+    }
+  } catch {
+    /* CoinGecko missed too. */
+  }
+  const raw = await fetchJson<unknown>(`${BINANCE}/ticker/24hr`);
+  const parsed = fromBinanceTickers(raw);
+  if (!parsed) throw new Error("فهرست بازار از CoinPaprika، CoinGecko و بایننس ساخته نشد.");
+  return {
+    tickers: parsed.tickers as PaprikaTicker[],
+    dominance: null,
+    source: "Binance ticker",
+  };
+}
 
+async function computeAnalysis(): Promise<AnalysisResult> {
+  const loaded = await loadUniverse();
+  const tickers = loaded.tickers;
   const btcTicker = tickers.find((t) => t.symbol === "BTC");
   if (!btcTicker) throw new Error("داده بیت‌کوین در دسترس نیست");
   const btcUsd = btcTicker.quotes.USD;
@@ -456,15 +502,17 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   } catch {
     unlockSource = "unavailable";
   }
-  const { regime, medianRs7, note: regimeNote } = detectRegime(
-    drafts,
-    global.bitcoin_dominance_percentage,
-  );
-  const dom = dominanceBiasOf(
-    global.bitcoin_dominance_percentage,
-    btcPct7d,
-    medianRs7,
-  );
+  const { regime, medianRs7, note: regimeNote } = detectRegime(drafts, loaded.dominance);
+  const dom =
+    loaded.dominance == null
+      ? {
+          bias: "neutral" as const,
+          note: msg(
+            "دامیننس بیت‌کوین در این منبع نبود و عددی برایش ساخته نشد.",
+            "Bitcoin dominance was missing from this source, so no figure was invented.",
+          ),
+        }
+      : dominanceBiasOf(loaded.dominance, btcPct7d, medianRs7);
   let scored = scoreUniverse(drafts, regime, { unlocks, kill: killSwitch }).sort(
     (a, b) => b.score - a.score,
   );
@@ -495,6 +543,12 @@ async function computeAnalysis(): Promise<AnalysisResult> {
     .map((row) => applyBookGate(row, bookBy.get(row.symbol)))
     .sort((a, b) => b.score - a.score);
   let { pick, runnerUp } = pickWinner(scored, regime, killSwitch);
+  if (!pick) {
+    const btcRow = scored.find((row) => row.symbol === "BTC");
+    if (!btcRow) throw new Error("داده بیت‌کوین در دسترس نیست");
+    pick = btcRow;
+    runnerUp = null;
+  }
   const rejected = books.filter((book) => book.gate === "thin").map((book) => book.symbol);
   if (bookBy.get(pick.symbol)?.gate === "thin") {
     const btcRow = scored.find((row) => row.symbol === "BTC");
@@ -515,10 +569,18 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   );
   if (!btcParsed) {
     caution.unshift(
-      "کندل بایننس در این لحظه در دسترس نبود؛ امتیاز با دادهٔ زنده پاپریکا (بازده کوتاه‌مدت و MC/FDV) ساخته شد.",
+      loaded.source === "CoinPaprika"
+        ? "کندل بایننس در این لحظه در دسترس نبود؛ امتیاز با دادهٔ زندهٔ فهرست (بازده کوتاه‌مدت و MC/FDV) ساخته شد."
+        : `کندل بایننس نبود. فهرست از ${loaded.source} آمد و عددی که در آن منبع نبود ساخته نشد.`,
     );
   } else if (!binanceOpen.value) {
     caution.unshift("بخشی از کندل‌ها از کش ذخیره‌شده آمد چون بایننس محدود بود.");
+  }
+  if (loaded.source !== "CoinPaprika") {
+    caution.unshift(`CoinPaprika در دسترس نبود؛ فهرست از ${loaded.source} ساخته شد.`);
+  }
+  if (loaded.source === "Binance ticker") {
+    caution.unshift("تیکر عمومی بایننس بازده ۷ و ۳۰ روزه و دامیننس ندارد؛ آن عددها ساخته نشدند.");
   }
   if (rejected.length) {
     caution.unshift(
@@ -543,7 +605,7 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   }
   const checklist = buildChecklist(pick, {
     regime,
-    btcDominance: global.bitcoin_dominance_percentage,
+    btcDominance: loaded.dominance,
     dominanceBias: dom.bias,
     kill: killSwitch,
     book: pickBook,
@@ -588,14 +650,14 @@ async function computeAnalysis(): Promise<AnalysisResult> {
   const result: AnalysisResult = {
     generatedAt,
     sources: [
-      "CoinPaprika",
+      loaded.source,
       ...(btcParsed ? ["Binance"] : []),
       ...(sawBook ? ["Order book"] : []),
       ...(sawFunding ? ["Funding"] : []),
       ...(sawOi ? ["Open interest"] : []),
       ...(unlockSource === "coinmarketcap" ? ["CMC Unlocks"] : []),
     ],
-    btcDominance: global.bitcoin_dominance_percentage,
+    btcDominance: loaded.dominance,
     btcPriceUsd: btcUsd.price,
     btcPct7d,
     btcPct30d,

@@ -9,7 +9,7 @@ import type {
   Regime,
   UnlockAssessment,
 } from "./types.ts";
-import { isHot, lookupMeta } from "./catalog.ts";
+import { isCatalogued, isHot, lookupMeta } from "./catalog.ts";
 import {
   clamp,
   detectWeeklyStructure,
@@ -263,7 +263,7 @@ export function enrichFromKlines(draft: CoinDraft): CoinDraft {
   };
 }
 
-export function detectRegime(rows: CoinDraft[], btcDominance: number): {
+export function detectRegime(rows: CoinDraft[], btcDominance: number | null): {
   regime: Regime;
   medianRs7: number;
   note: string;
@@ -271,19 +271,21 @@ export function detectRegime(rows: CoinDraft[], btcDominance: number): {
   const alts = rows.filter((r) => r.symbol !== "BTC").map((r) => r.rs7d);
   const sorted = [...alts].sort((a, b) => a - b);
   const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
-  if (mid < -0.03 || btcDominance >= 55) {
-    if (mid < -0.03 && btcDominance >= 52) {
+  const dom =
+    typeof btcDominance === "number" && Number.isFinite(btcDominance) ? btcDominance : null;
+  if (mid < -0.03 || (dom != null && dom >= 55)) {
+    if (mid < -0.03 && dom != null && dom >= 52) {
       return {
         regime: "btc",
         medianRs7: mid,
         note: msg(
-          `میانه آلت‌ها در ۷ روز ${pct(mid)} ضعیف‌تر از بیت‌کوین بوده و دامیننس BTC ${btcDominance.toFixed(1)}٪ است — فصل بیت‌کوین.`,
-          `The median alt was ${pctEn(mid)} weaker than Bitcoin over 7 days and BTC dominance is ${btcDominance.toFixed(1)}% — Bitcoin season.`,
+          `میانه آلت‌ها در ۷ روز ${pct(mid)} ضعیف‌تر از بیت‌کوین بوده و دامیننس BTC ${dom.toFixed(1)}٪ است — فصل بیت‌کوین.`,
+          `The median alt was ${pctEn(mid)} weaker than Bitcoin over 7 days and BTC dominance is ${dom.toFixed(1)}% — Bitcoin season.`,
         ),
       };
     }
   }
-  if (mid > 0.03 && btcDominance < 54) {
+  if (mid > 0.03 && dom != null && dom < 54) {
     return {
       regime: "alt",
       medianRs7: mid,
@@ -700,6 +702,16 @@ function scoreRisk(d: CoinDraft, sh: number, all: number[]): FactorScore {
 }
 
 function scoreNarrative(d: CoinDraft): FactorScore {
+  if (!isCatalogued(d.symbol)) {
+    return factor(
+      "narrative",
+      50,
+      msg(
+        "در کاتالوگ روایت نبود؛ امتیاز خنثی ماند و جریمه نشد.",
+        "Not in the narrative catalog; the score stayed neutral and was not penalized.",
+      ),
+    );
+  }
   const meta = lookupMeta(d.symbol);
   let score = 46;
   const bits: string[] = [];
@@ -742,43 +754,44 @@ function scoreNarrative(d: CoinDraft): FactorScore {
   return factor("narrative", score, along(bits, "؛ ", "; "));
 }
 
+export function passesSpotGate(r: CoinRow): boolean {
+  if (r.buySignal === "suspended") return false;
+  if (r.volume24h < 8_000_000) return false;
+  if (r.rank > 100) return false;
+  if (r.symbol !== "BTC" && r.mcFdv != null && r.mcFdv < 0.32) return false;
+  if (r.symbol !== "BTC" && r.distFrom30dHighPct != null && r.distFrom30dHighPct > -0.03) {
+    return false;
+  }
+  const extendedPump =
+    r.rs7d > 0.18 &&
+    (r.rsi14 == null || r.rsi14 > 60) &&
+    (r.distFrom30dHighPct == null || r.distFrom30dHighPct > -0.1);
+  if (extendedPump) return false;
+  return true;
+}
+
 export function pickWinner(
   ranked: CoinRow[],
   regime: Regime,
   kill?: BtcKillSwitch,
-): { pick: CoinRow; runnerUp: CoinRow | null } {
-  const eligible = ranked.filter((r) => {
-    if (r.buySignal === "suspended") return false;
-    if (r.volume24h < 8_000_000) return false;
-    if (r.rank > 100) return false;
-    if (
-      r.symbol !== "BTC" &&
-      r.mcFdv != null &&
-      r.mcFdv < 0.32
-    ) {
-      return false;
-    }
-    if (
-      r.symbol !== "BTC" &&
-      r.distFrom30dHighPct != null &&
-      r.distFrom30dHighPct > -0.03
-    ) {
-      return false;
-    }
-    const extendedPump =
-      r.rs7d > 0.18 &&
-      (r.rsi14 == null || r.rsi14 > 60) &&
-      (r.distFrom30dHighPct == null || r.distFrom30dHighPct > -0.1);
-    if (extendedPump) return false;
-    return true;
-  });
-  const list = eligible.length ? eligible : ranked.filter((r) => r.rank <= 100);
-  const sorted = [...list].sort((a, b) => b.score - a.score);
+): { pick: CoinRow | null; runnerUp: CoinRow | null; refused: boolean; viaSeasonRule: boolean } {
+  if (kill?.status === "SUSPENDED") {
+    return { pick: null, runnerUp: null, refused: true, viaSeasonRule: false };
+  }
+  const eligible = ranked.filter(passesSpotGate);
+  if (!eligible.length) {
+    return { pick: null, runnerUp: null, refused: true, viaSeasonRule: false };
+  }
+  const sorted = [...eligible].sort((a, b) => b.score - a.score);
   let pick = sorted[0];
   const btc = ranked.find((r) => r.symbol === "BTC");
+  let seasonForced = false;
 
   if (pick && btc && pick.symbol !== "BTC" && regime === "btc") {
-    if (pick.score - btc.score < 3.5) pick = btc;
+    if (pick.score - btc.score < 3.5) {
+      pick = btc;
+      seasonForced = true;
+    }
   }
 
   if (pick && pick.rsi14 != null && pick.rsi14 > 78) {
@@ -795,16 +808,7 @@ export function pickWinner(
     if (cleaner) pick = cleaner;
   }
 
-  if (kill?.status === "SUSPENDED") {
-    const btc = ranked.find((r) => r.symbol === "BTC");
-    if (btc) {
-      const runnerUp = sorted.find((r) => r.symbol !== "BTC") ?? null;
-      return { pick: btc, runnerUp };
-    }
-  }
-
-  const runnerUp =
-    sorted.find((r) => r.symbol !== pick?.symbol) ?? null;
-
-  return { pick: pick ?? ranked[0]!, runnerUp };
+  const viaSeasonRule = seasonForced && pick?.symbol === "BTC";
+  const runnerUp = sorted.find((r) => r.symbol !== pick?.symbol) ?? null;
+  return { pick: pick ?? null, runnerUp, refused: false, viaSeasonRule };
 }

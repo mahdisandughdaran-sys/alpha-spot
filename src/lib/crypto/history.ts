@@ -10,7 +10,7 @@ export type RunSummary = {
   name: string;
   score: number;
   regime: Regime;
-  dominance: number;
+  dominance: number | null;
   rs7d: number;
   runnerUp: string | null;
   killStatus?: KillSwitchStatus;
