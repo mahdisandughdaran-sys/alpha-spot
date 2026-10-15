@@ -20,6 +20,7 @@ import { fromBinanceTickers, fromCoinGecko } from "./universe-fallback.ts";
 import { applyLens, type Horizon, type WeightCuts } from "./lens.ts";
 import { loadVenueListing } from "./listings.server.ts";
 import { buildVerdict } from "./verdict.ts";
+import { sessionCalendar } from "./session-calendar.ts";
 import type { VenueId } from "./venues.ts";
 import { msg } from "@/lib/i18n/lex";
 import type { AnalysisResult, BookCheck, CoinDraft, DataCache, PairPoint, UnlockAssessment } from "./types.ts";
@@ -638,6 +639,8 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
   const sawOi = books.some((book) => book.openInterestUsd != null);
   const health = await cacheHealth();
   const generatedAt = new Date().toISOString();
+  const calendar = sessionCalendar(new Date());
+  const sessionBuys = calendar.blockSpot ? "suspended" : killSwitch.spotBuys;
   let opportunities = emptyOpportunityBoard(
     generatedAt,
     "اسکنر فرصت اجرا نشد؛ رتبه‌بندی فعلی میز دست نخورده است.",
@@ -660,7 +663,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     opportunities = scanOpportunities(inputs, {
       generatedAt,
       regime,
-      spotBuys: killSwitch.spotBuys,
+      spotBuys: sessionBuys,
     });
   } catch {
     opportunities = emptyOpportunityBoard(
@@ -671,7 +674,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
 
   const listing = await listingPromise;
   const listed = listing.ok ? new Set(listing.bases) : null;
-  const verdict = buildVerdict({
+  let verdict = buildVerdict({
     ranked: scored,
     regime,
     kill: killSwitch,
@@ -679,6 +682,21 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     listed,
     horizon: run.horizon,
   });
+  if (calendar.blockSpot) {
+    const held = verdict.symbol;
+    verdict = {
+      kind: "stay",
+      symbol: null,
+      name: null,
+      priceUsd: null,
+      reachUsd: null,
+      invalidationUsd: null,
+      reason: msg(
+        `${calendar.reasonFa}${held ? ` نام برتر مدل ${held} بود و به خاطر تعطیلی صادر نشد.` : ""}`,
+        `${calendar.reasonEn}${held ? ` The model's top name was ${held} and was withheld because of the holiday.` : ""}`,
+      ),
+    };
+  }
   if (decision.refused) {
     reasons.splice(0, reasons.length, verdict.reason);
   } else if (!reasons.includes(verdict.reason)) {
@@ -716,20 +734,20 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     klinesOk,
     klinesTried,
     killSwitch,
-    spotBuys: killSwitch.spotBuys,
+    spotBuys: sessionBuys,
     unlockSource,
     unlockMatched,
     pick: shown,
     runnerUp,
     viaSeasonRule: decision.viaSeasonRule,
-    refused: decision.refused,
+    refused: decision.refused || calendar.blockSpot,
     verdict,
     listingOk: listing.ok,
     horizon: run.horizon,
     venue: run.venue,
     top: scored,
     reasons,
-    caution: caution.slice(0, 6),
+    caution: calendar.blockSpot ? [verdict.reason, ...caution].slice(0, 6) : caution.slice(0, 6),
     confidence: conf.confidence,
     confidenceNote: conf.note,
     checklist,

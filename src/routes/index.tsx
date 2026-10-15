@@ -7,6 +7,7 @@ import { AlertStrip } from "@/components/desk/alert-strip";
 import { GithubStar } from "@/components/desk/github-star";
 import { HistoryPanel } from "@/components/desk/history-panel";
 import { KillSwitchBanner } from "@/components/desk/kill-switch-banner";
+import { MacroRail } from "@/components/desk/macro-rail";
 import { Leaderboard } from "@/components/desk/leaderboard";
 import { LiveBadge } from "@/components/desk/live-badge";
 import { LocaleSwitch } from "@/components/desk/locale-switch";
@@ -55,7 +56,8 @@ import {
   toggleWatch,
   type RunSummary,
 } from "@/lib/crypto/history";
-import { checkDeskPulse, checkOpportunityQuotes, dispatchDeskSignal } from "@/lib/crypto/ops";
+import { checkDeskPulse, checkOpportunityQuotes, dispatchDeskSignal, loadMacroDesk } from "@/lib/crypto/ops";
+import type { MacroDesk } from "@/lib/crypto/macro";
 import {
   alertsFromQuotes,
   alertsFromScan,
@@ -72,7 +74,7 @@ import { useI18n } from "@/lib/i18n/locale";
 
 export const Route = createFileRoute("/")({ component: Home });
 
-type Tab = "pick" | "flow" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
+type Tab = "pick" | "macro" | "flow" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
 
 function Home() {
   const { tr, locale } = useI18n();
@@ -80,6 +82,8 @@ function Home() {
   const pulse = useServerFn(checkDeskPulse);
   const quotes = useServerFn(checkOpportunityQuotes);
   const sendAlert = useServerFn(dispatchDeskSignal);
+  const macro = useServerFn(loadMacroDesk);
+  const [news, setNews] = useState<MacroDesk | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [stage, setStage] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -102,6 +106,26 @@ function Home() {
     weak: FactorKey | null;
   } | null>(null);
   const booted = useRef(false);
+
+  useEffect(() => {
+    let stop = false;
+    void macro()
+      .then((data) => {
+        if (!stop) setNews(data);
+      })
+      .catch(() => {
+        if (!stop) {
+          setNews({
+            items: [],
+            source: "Federal Reserve",
+            note: "فید فدرال رزرو الان جواب نداد. تقویم جلسه و تعطیل سر جایش است.",
+          });
+        }
+      });
+    return () => {
+      stop = true;
+    };
+  }, [macro]);
 
   const stages = [
     tr("گرفتن رتبه، عرضه و حجم صد ارز برتر", "Fetching rank, supply, and volume for the top 100"),
@@ -557,6 +581,8 @@ function Home() {
           {flash ? <p className="text-sm text-warn">{tr(flash)}</p> : null}
         </header>
 
+        <MacroRail news={news} />
+
         {status === "idle" && flowOnly ? (
           <div className="flex flex-col gap-4">
             <button type="button" onClick={() => setFlowOnly(false)} className="self-start text-sm text-muted">
@@ -622,6 +648,7 @@ function Home() {
               {(
                 [
                   ["pick", tr("انتخاب", "Pick")],
+                  ["macro", tr("کلان", "Macro")],
                   ["flow", tr("همگرایی", "Confluence")],
                   ["opportunity", tr("فرصت‌ها", "Setups")],
                   ["table", tr("رتبه‌ها", "Ranks")],
@@ -651,6 +678,7 @@ function Home() {
               ))}
             </nav>
             {tab === "pick" ? <PickPanel result={result} live={live} /> : null}
+            {tab === "macro" ? <MacroRail news={news} mode="full" /> : null}
             {tab === "flow" ? <ConfluencePanel key={result.pick.symbol} defaultSymbol={result.pick.symbol} /> : null}
             {tab === "opportunity" ? <OpportunityPanel board={result.opportunities} /> : null}
             {tab === "table" ? (

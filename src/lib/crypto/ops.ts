@@ -3,6 +3,7 @@ import type { BacktestReport } from "./backtest.ts";
 import type { DispatchInput, DispatchResult } from "./dispatch.server.ts";
 import type { OpportunityBacktestReport } from "./opportunity-backtest.ts";
 import type { PulseResult } from "./pulse.server.ts";
+import type { MacroDesk } from "./macro.ts";
 import { normalizeVenueCall, type VenueCall, type VenueResult } from "./venues.ts";
 
 export const runSpotBacktest = createServerFn({ method: "POST" }).handler(
@@ -53,6 +54,11 @@ export const dispatchDeskSignal = createServerFn({ method: "POST" })
     const { sendDeskSignal } = await import("./dispatch.server.ts");
     return sendDeskSignal(data);
   });
+
+export const loadMacroDesk = createServerFn({ method: "GET" }).handler(async (): Promise<MacroDesk> => {
+  const { loadMacroNews } = await import("./macro-news.server.ts");
+  return loadMacroNews();
+});
 
 export const runVenue = createServerFn({ method: "POST" })
   .validator((input: VenueCall) => normalizeVenueCall(input))
