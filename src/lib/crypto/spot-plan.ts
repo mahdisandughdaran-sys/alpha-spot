@@ -103,7 +103,7 @@ export function formatSpotUsd(n: number): string {
 
 /** Best spot entry, upside sell, and downside sell for one USDT pair. */
 export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotPlan {
-  if (candles.length < 40) throw new Error("کندل روزانه کافی نیست.");
+  if (candles.length < 20) throw new Error("کندل روزانه کافی نیست.");
   const closes = candles.map((bar) => bar.c);
   const price = closes[closes.length - 1] ?? 0;
   if (!(price > 0)) throw new Error("قیمت نامعتبر است.");
@@ -221,6 +221,8 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
   else if (tags.length >= 2 || (tags.length >= 1 && regime === "bull" && !broken)) confidence = "medium";
   if (weekly === "bear" && regime === "bull" && confidence === "high") confidence = "medium";
 
+  if (candles.length < 60) confidence = "low";
+
   const chart = candles.slice(-140).map((bar, t) => ({
     t,
     time: bar.t,
@@ -258,6 +260,17 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
     monthLow,
   });
 
+  const notes =
+    candles.length < 80
+      ? [
+          {
+            fa: `فقط ${candles.length} کندل روزانه روی بایننس هست. این سطح‌ها از تاریخچه کوتاه ساخته شده‌اند.`,
+            en: `Binance only has ${candles.length} daily candles. These levels come from a short history.`,
+          },
+          ...copy.notes,
+        ].slice(0, 5)
+      : copy.notes;
+
   return {
     symbol: asset.symbol,
     nameFa: asset.nameFa,
@@ -288,6 +301,7 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
     touchIndex,
     chart,
     ...copy,
+    notes,
   };
 }
 

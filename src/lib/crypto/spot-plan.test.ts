@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSpotAsset, SPOT_ASSETS } from "./spot-assets.ts";
+import { getSpotAsset, pickTopSpot, SPOT_ASSETS, TOP_SPOT } from "./spot-assets.ts";
 import { buildSpotPlan, type SpotCandle } from "./spot-plan.ts";
 
 function fromCloses(closes: number[]): SpotCandle[] {
@@ -34,12 +34,46 @@ const btc = {
   pair: "BTCUSDT",
 };
 
-test("spot catalog keeps bitcoin live and leaves room for the next coins", () => {
+test("the bitcoin desk keeps twenty enabled spot assets and bitcoin first", () => {
+  assert.equal(SPOT_ASSETS.length, TOP_SPOT);
+  assert.equal(SPOT_ASSETS[0]?.id, "btc");
   assert.equal(getSpotAsset("btc")?.enabled, true);
   assert.equal(getSpotAsset("BTC")?.pair, "BTCUSDT");
-  const later = SPOT_ASSETS.filter((asset) => !asset.enabled);
-  assert.ok(later.length >= 4);
+  assert.equal(getSpotAsset("eth")?.enabled, true);
+  assert.equal(
+    SPOT_ASSETS.every((asset) => asset.enabled && asset.pair.endsWith("USDT")),
+    true,
+  );
   assert.equal(getSpotAsset("nope"), null);
+});
+
+test("top twenty skips stables and names that are not on binance", () => {
+  const ranked = [
+    { symbol: "BTC", name: "Bitcoin", rank: 1 },
+    { symbol: "USDT", name: "Tether", rank: 2 },
+    { symbol: "ETH", name: "Ethereum", rank: 3 },
+    { symbol: "USDC", name: "USDC", rank: 4 },
+    { symbol: "SOL", name: "Solana", rank: 5 },
+    { symbol: "FIGR_HELOC", name: "Figure Heloc", rank: 6 },
+    { symbol: "WBTC", name: "Wrapped Bitcoin", rank: 7 },
+  ];
+  const picked = pickTopSpot(ranked, new Set(["BTC", "ETH", "SOL", "BNB"]), 3);
+  assert.deepEqual(
+    picked.map((asset) => asset.symbol),
+    ["BTC", "ETH", "SOL"],
+  );
+  assert.equal(picked[0]?.nameFa, "بیت‌کوین");
+  assert.equal(picked[0]?.marketRank, 1);
+  assert.equal(picked[2]?.marketRank, 5);
+});
+
+test("a short live list is filled from the fallback twenty", () => {
+  const picked = pickTopSpot([{ symbol: "BTC", name: "Bitcoin", rank: 1 }], new Set(["BTC", "ETH", "SOL"]), 3);
+  assert.deepEqual(
+    picked.map((asset) => asset.symbol),
+    ["BTC", "ETH", "SOL"],
+  );
+  assert.equal(picked[1]?.marketRank, null);
 });
 
 test("a bull pullback has an entry under price and both sell levels", () => {

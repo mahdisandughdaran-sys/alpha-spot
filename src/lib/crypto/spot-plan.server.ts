@@ -1,4 +1,4 @@
-import { getSpotAsset } from "./spot-assets.ts";
+import { resolveSpotAsset } from "./spot-assets.ts";
 import { buildSpotPlan, type SpotCandle, type SpotPlan } from "./spot-plan.ts";
 
 const BINANCE = "https://data-api.binance.vision/api/v3/klines";
@@ -13,10 +13,10 @@ export type SpotDesk = {
 const memory = new Map<string, { at: number; candles: SpotCandle[] }>();
 
 export async function loadSpotPlan(assetId: string): Promise<SpotDesk> {
-  const asset = getSpotAsset(assetId);
+  const asset = resolveSpotAsset(assetId);
   if (!asset || !asset.enabled) throw new Error("این ارز هنوز روی میز اسپات فعال نشده.");
-  const candles = await loadCandles(asset.pair);
-  if (candles.length < 80) throw new Error("کندل روزانه این جفت از بایننس کامل نرسید.");
+  const candles = await loadSpotCandles(asset.pair);
+  if (candles.length < 20) throw new Error("کندل روزانه این جفت از بایننس کامل نرسید.");
   return {
     assetId: asset.id,
     fetchedAt: new Date().toISOString(),
@@ -24,7 +24,7 @@ export async function loadSpotPlan(assetId: string): Promise<SpotDesk> {
   };
 }
 
-async function loadCandles(pair: string): Promise<SpotCandle[]> {
+export async function loadSpotCandles(pair: string): Promise<SpotCandle[]> {
   const hit = memory.get(pair);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.candles;
 
@@ -33,14 +33,14 @@ async function loadCandles(pair: string): Promise<SpotCandle[]> {
   try {
     const res = await fetch(`${BINANCE}?symbol=${pair}&interval=1d&limit=240`, {
       signal: ctrl.signal,
-      headers: { Accept: "application/json", "User-Agent": "AlphaSpot/1.4" },
+      headers: { Accept: "application/json", "User-Agent": "AlphaSpot/1.5" },
     });
     if (!res.ok) throw new Error(`بایننس پاسخ ${res.status} داد.`);
     const candles = parseKlines(await res.json());
-    if (candles.length >= 80) memory.set(pair, { at: Date.now(), candles });
+    if (candles.length >= 20) memory.set(pair, { at: Date.now(), candles });
     return candles;
   } catch (err) {
-    if (hit && hit.candles.length >= 80) return hit.candles;
+    if (hit && hit.candles.length >= 20) return hit.candles;
     throw err instanceof Error ? err : new Error("داده بازار نرسید.");
   } finally {
     clearTimeout(timer);

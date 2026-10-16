@@ -546,7 +546,7 @@ function Home() {
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
               <Button size="lg" variant="outline" asChild className="h-12 min-w-44">
                 <Link to="/spot/$assetId" params={{ assetId: "btc" }}>
-                  {tr("میز بیت‌کوین و اتریوم", "Bitcoin and Ethereum desk")}
+                  {tr("میز بیت‌کوین · ۲۰ ارز", "Bitcoin desk · top 20")}
                 </Link>
               </Button>
               <Button

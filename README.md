@@ -76,7 +76,7 @@ tail -f .dev-server.log
 8. In **فرصت‌ها**, run **بک‌تست فرصت**. It keeps a fee of 10 bps and slippage of 8 bps per side, and it will say when there are not enough confirmed trades. Past results are not future results.
 9. From the idle screen, **همگرایی حجم** reads one coin without waiting for the full universe: taker-buy flow, an estimated liquidation map (unswept 5x–100x pools), and `position = (capital × risk%) / stop%`.
 
-10. Open **میز بیت‌کوین** for a dedicated Bitcoin spot page: the best entry on the daily chart, the price to buy from, the price that means sell if crossed upward, and the price that means sell if crossed downward. Ethereum, Solana, BNB, XRP, and TON sit on the same page as the next slots. Turn one on in `src/lib/crypto/spot-assets.ts` (`enabled: true`) and the same engine fills it. No new route.
+10. Open **میز بیت‌کوین** for the same spot page, now across the top 20 non-stable coins. Bitcoin stays first. Each name gets one buy, one price that means sell if crossed upward, and one price that means sell if crossed downward. Stables and wrapped assets are left out. The list follows live market cap when CoinPaprika or CoinGecko answers, and a saved twenty when they do not. No new route.
 
 This is not investment advice.
 
