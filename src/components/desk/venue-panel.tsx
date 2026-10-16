@@ -13,9 +13,7 @@ const inputClass =
   "num h-11 rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] outline-none";
 
 const VENUE_EN: Record<VenueId, string> = {
-  nobitex: "Nobitex",
   wallex: "Wallex",
-  ompfinex: "OMPFinex",
   binance: "Binance",
   bybit: "Bybit",
 };
@@ -35,7 +33,7 @@ export function VenuePanel({ result }: { result: AnalysisResult }) {
     return result.top.find((item) => item.symbol === upper) ?? null;
   }, [result.top, symbol]);
 
-  const needsSecret = vault.venue === "binance" || vault.venue === "bybit" || vault.venue === "nobitex";
+  const needsSecret = vault.venue === "binance" || vault.venue === "bybit";
   const buysSuspended = result.spotBuys === "suspended" && side === "BUY";
 
   function patch(partial: Partial<VenueVault>) {
@@ -112,7 +110,7 @@ export function VenuePanel({ result }: { result: AnalysisResult }) {
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="flex flex-col gap-2 text-xs text-subtle">
-          {vault.venue === "nobitex" ? tr("توکن یا کلید عمومی", "Token or public key") : tr("کلید API", "API key")}
+          {tr("کلید API", "API key")}
           <input
             type="password"
             autoComplete="off"
@@ -123,9 +121,7 @@ export function VenuePanel({ result }: { result: AnalysisResult }) {
         </label>
         {needsSecret ? (
           <label className="flex flex-col gap-2 text-xs text-subtle">
-            {vault.venue === "nobitex"
-              ? tr("کلید خصوصی Ed25519 (اگر توکن قدیمی دارید خالی بگذارید)", "Ed25519 private key (leave empty if you still have a legacy token)")
-              : tr("کلید مخفی", "Secret key")}
+            {tr("کلید مخفی", "Secret key")}
             <input
               type="password"
               autoComplete="off"

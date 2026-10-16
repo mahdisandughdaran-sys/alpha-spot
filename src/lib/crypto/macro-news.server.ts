@@ -1,14 +1,23 @@
+import { msg } from "@/lib/i18n/lex";
 import type { MacroDesk, MacroItem } from "./macro.ts";
 
 export type { MacroDesk, MacroItem } from "./macro.ts";
 
 const FEEDS = [
-  "https://www.federalreserve.gov/feeds/press_monetary.xml",
-  "https://www.federalreserve.gov/feeds/press_all.xml",
+  "https://www.coindesk.com/arc/outboundfeeds/rss/",
+  "https://cointelegraph.com/rss",
+  "https://decrypt.co/feed",
 ];
 
 let cache: { at: number; value: MacroDesk } | null = null;
 const TTL = 15 * 60 * 1000;
+const FRESH_MS = 14 * 24 * 60 * 60 * 1000;
+
+const NOISE =
+  /\b(price prediction|price forecast|could reach|might reach|you won.?t believe|top \d+|best crypto to buy|how to buy|airdrop|sponsored|presale|100x|memecoin to)\b/i;
+
+const CRYPTO =
+  /\b(bitcoin|btc|ethereum|ether|eth|crypto|cryptocurrency|xrp|solana|stablecoin|usdt|usdc|tether|etf|blockchain|defi|binance|coinbase|kraken|sec|cftc|token|altcoin)\b/i;
 
 function decode(value: string): string {
   return value
@@ -28,41 +37,70 @@ function grab(xml: string, tag: string): string {
   return match ? decode(match[1]) : "";
 }
 
-function tagFor(title: string): { fa: string; en: string } {
-  const text = title.toLowerCase();
-  if (/fomc|federal funds|interest rate|monetary policy|discount rate/.test(text)) {
-    return { fa: "نرخ بهره", en: "Rates" };
-  }
-  if (/inflation|cpi|pce|price/.test(text)) return { fa: "تورم", en: "Inflation" };
-  if (/employment|labor|payroll|unemployment|job/.test(text)) return { fa: "اشتغال", en: "Jobs" };
-  if (/balance sheet|treasury|financial stability/.test(text)) return { fa: "ترازنامه", en: "Balance sheet" };
-  return { fa: "فدرال رزرو", en: "Fed" };
+function linkOf(chunk: string): string {
+  const href = chunk.match(/<link[^>]+href=["'](https:[^"']+)["']/i);
+  if (href) return href[1];
+  const plain = grab(chunk, "link") || grab(chunk, "guid");
+  return plain.startsWith("https://") ? plain : "";
 }
 
-function parseFeed(xml: string): MacroItem[] {
+function tagFor(title: string): { fa: string; en: string } {
+  const text = title.toLowerCase();
+  if (/hack|exploit|stolen|breach|drained|outage/.test(text)) return { fa: "امنیت", en: "Security" };
+  if (/etf|sec\b|cftc|regulat|lawsuit|approval|ban\b/.test(text)) return { fa: "قانون", en: "Policy" };
+  if (/ethereum|\beth\b/.test(text) && !/\bbitcoin\b|\bbtc\b/.test(text)) return { fa: "اتریوم", en: "ETH" };
+  if (/\bbitcoin\b|\bbtc\b/.test(text) && !/ethereum|\beth\b/.test(text)) return { fa: "بیت‌کوین", en: "BTC" };
+  if (/ethereum|\beth\b|\bbitcoin\b|\bbtc\b/.test(text)) return { fa: "بازار", en: "Market" };
+  if (/fed\b|fomc|rate cut|rate hike|inflation/.test(text)) return { fa: "کلان", en: "Macro" };
+  return { fa: "کریپتو", en: "Crypto" };
+}
+
+function importance(title: string, summary: string): number {
+  const text = `${title} ${summary}`;
+  if (NOISE.test(text) || !CRYPTO.test(text)) return 0;
+  const lower = text.toLowerCase();
+  let score = 1;
+  if (/\b(bitcoin|btc|ethereum|ether)\b|\beth\b/.test(lower)) score += 3;
+  if (/\b(etf|sec|cftc|regulat|lawsuit|blackrock|approval|ban)\b/.test(lower)) score += 4;
+  if (/\b(hack|exploit|stolen|breach|drained|bankrupt|halt|outage)\b/.test(lower)) score += 4;
+  if (/\b(liquidat|billion|all-time|record|crash|stablecoin|usdt|usdc|tether)\b/.test(lower)) score += 2;
+  if (/\b(fomc|federal reserve|rate cut|rate hike|inflation)\b/.test(lower)) score += 2;
+  if (/\b(binance|coinbase|kraken|microstrategy|treasury|etf)\b/.test(lower)) score += 1;
+  return score;
+}
+
+function parseFeed(xml: string): Array<MacroItem & { score: number }> {
   return xml
     .split(/<item\b/i)
     .slice(1)
     .map((chunk) => {
       const title = grab(chunk, "title");
-      const link = grab(chunk, "link") || grab(chunk, "guid");
-      const publishedAt = grab(chunk, "pubDate");
+      const link = linkOf(chunk);
+      const publishedAt = grab(chunk, "pubDate") || grab(chunk, "published") || grab(chunk, "updated");
       const summary = grab(chunk, "description").slice(0, 240);
       const tag = tagFor(`${title} ${summary}`);
-      return { title, link, publishedAt, summary, tagFa: tag.fa, tagEn: tag.en };
+      return {
+        title,
+        link,
+        publishedAt,
+        summary,
+        tagFa: tag.fa,
+        tagEn: tag.en,
+        score: importance(title, summary),
+      };
     })
-    .filter((item) => item.title && item.link.startsWith("https://"));
+    .filter((item) => item.title && item.link.startsWith("https://") && item.score > 0);
 }
 
 export async function loadMacroNews(): Promise<MacroDesk> {
   if (cache && Date.now() - cache.at < TTL) return cache.value;
 
-  const collected: MacroItem[] = [];
+  const collected: Array<MacroItem & { score: number }> = [];
   let failed = 0;
   for (const url of FEEDS) {
     try {
       const response = await fetch(url, {
-        headers: { Accept: "application/rss+xml, application/xml, text/xml" },
+        headers: { Accept: "application/rss+xml, application/xml, text/xml, */*" },
         signal: AbortSignal.timeout(12_000),
       });
       if (!response.ok) {
@@ -75,25 +113,33 @@ export async function loadMacroNews(): Promise<MacroDesk> {
     }
   }
 
+  const now = Date.now();
   const seen = new Set<string>();
-  const items = collected
-    .filter((item) => {
-      if (seen.has(item.link)) return false;
-      seen.add(item.link);
-      return true;
-    })
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-    .slice(0, 10);
+  const fresh = collected.filter((item) => {
+    const key = item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (!key || seen.has(key) || seen.has(item.link)) return false;
+    const at = Date.parse(item.publishedAt);
+    if (Number.isFinite(at) && now - at > FRESH_MS) return false;
+    seen.add(key);
+    seen.add(item.link);
+    return true;
+  });
+
+  const ranked = fresh.sort(
+    (a, b) => b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
+  );
+  const important = ranked.filter((item) => item.score >= 4);
+  const picked = (important.length >= 4 ? important : ranked.filter((item) => item.score >= 3)).slice(0, 10);
 
   const value: MacroDesk = {
-    items,
-    source: "Federal Reserve",
+    items: picked.map(({ score: _score, ...item }) => item),
+    source: "CoinDesk · Cointelegraph · Decrypt",
     note:
-      items.length > 0
+      picked.length > 0
         ? null
         : failed === FEEDS.length
-          ? "فید فدرال رزرو الان جواب نداد. تقویم جلسه و تعطیل سر جایش است."
-          : "خبر تازه‌ای در فید نبود.",
+          ? msg("فید اخبار کریپتو الان جواب نداد.", "The crypto news feed did not answer.")
+          : msg("خبر مهم تازه‌ای در فیدهای کریپتو نبود.", "No fresh important crypto headline was in the feeds."),
   };
   cache = { at: Date.now(), value };
   return value;

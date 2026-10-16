@@ -19,8 +19,10 @@ export const Route = createFileRoute("/spot/$assetId")({
       {
         title:
           params.assetId === "btc"
-            ? "بیت‌کوین · آلفا اسپات"
-            : "میز اسپات · آلفا اسپات",
+            ? "بیت‌کوین و اتریوم · آلفا اسپات"
+            : params.assetId === "eth"
+              ? "اتریوم · آلفا اسپات"
+              : "میز اسپات · آلفا اسپات",
       },
     ],
   }),
@@ -35,6 +37,11 @@ function SpotDeskPage() {
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "soon" | "missing">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [ethPlan, setEthPlan] = useState<SpotPlan | null>(null);
+  const [ethFetchedAt, setEthFetchedAt] = useState<string | null>(null);
+  const [ethStatus, setEthStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [ethError, setEthError] = useState<string | null>(null);
+  const paired = asset?.id === "btc";
 
   useEffect(() => {
     let stop = false;
@@ -69,9 +76,32 @@ function SpotDeskPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset?.id, asset?.enabled]);
 
+  useEffect(() => {
+    if (!paired) return;
+    let stop = false;
+    setEthStatus("loading");
+    setEthError(null);
+    void load({ data: { assetId: "eth" } })
+      .then((desk) => {
+        if (stop) return;
+        setEthPlan(desk.plan);
+        setEthFetchedAt(desk.fetchedAt);
+        setEthStatus("ready");
+      })
+      .catch((err: unknown) => {
+        if (stop) return;
+        setEthStatus("error");
+        setEthError(err instanceof Error ? err.message : "تحلیل اتریوم انجام نشد.");
+      });
+    return () => {
+      stop = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paired]);
+
   return (
     <main className="desk-grid min-h-dvh">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8 md:px-6 md:py-12">
+      <div className={`mx-auto flex w-full flex-col gap-6 px-4 py-8 md:px-6 md:py-12 ${paired ? "max-w-7xl" : "max-w-5xl"}`}>
         <header className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-subtle">
             <Link to="/" className="inline-flex h-11 items-center gap-2 text-muted hover:text-fg">
@@ -83,13 +113,22 @@ function SpotDeskPage() {
           <div className="max-w-3xl">
             <p className="num text-xs tracking-widest text-subtle">ALPHA SPOT</p>
             <h1 className="mt-2 text-4xl font-medium tracking-tight text-fg md:text-5xl">
-              {asset ? tr(asset.nameFa, asset.nameEn) : tr("ارز ناشناس", "Unknown asset")}
+              {paired
+                ? tr("بیت‌کوین و اتریوم", "Bitcoin and Ethereum")
+                : asset
+                  ? tr(asset.nameFa, asset.nameEn)
+                  : tr("ارز ناشناس", "Unknown asset")}
             </h1>
             <p className="mt-3 text-base leading-relaxed text-muted">
-              {tr(
-                "یک نقطه برای خرید اسپات، یک قیمت که اگر بالا رد شد بفروشی، و یک قیمت که اگر پایین رد شد خارج شوی.",
-                "One spot buy, one price that means sell if it crosses up, and one price that means sell if it crosses down.",
-              )}
+              {paired
+                ? tr(
+                    "همان میز بیت‌کوین، و تحلیل اتریوم کنارش. برای هر کدام یک نقطه خرید، یک قیمت که اگر بالا رد شد بفروشی، و یک قیمت که اگر پایین رد شد خارج شوی.",
+                    "The same Bitcoin desk, with Ethereum beside it. Each has one buy, one price that means sell if it crosses up, and one price that means sell if it crosses down.",
+                  )
+                : tr(
+                    "یک نقطه برای خرید اسپات، یک قیمت که اگر بالا رد شد بفروشی، و یک قیمت که اگر پایین رد شد خارج شوی.",
+                    "One spot buy, one price that means sell if it crosses up, and one price that means sell if it crosses down.",
+                  )}
             </p>
           </div>
           <AssetRail activeId={asset?.id ?? ""} />
@@ -161,7 +200,87 @@ function SpotDeskPage() {
           </section>
         ) : null}
 
-        {status === "ready" && plan ? (
+        {status === "ready" && plan && paired ? (
+          <div className="grid items-start gap-8 xl:grid-cols-2">
+            <section className="flex min-w-0 flex-col gap-3">
+              <h2 className="text-lg font-medium text-fg">{tr("تحلیل بیت‌کوین", "Bitcoin analysis")}</h2>
+              <PlanBody
+                plan={plan}
+                fetchedAt={fetchedAt}
+                onReload={() => {
+                  if (!asset) return;
+                  setStatus("loading");
+                  void load({ data: { assetId: asset.id } })
+                    .then((desk) => {
+                      setPlan(desk.plan);
+                      setFetchedAt(desk.fetchedAt);
+                      setStatus("ready");
+                    })
+                    .catch((err: unknown) => {
+                      setStatus("error");
+                      setError(err instanceof Error ? err.message : "تحلیل اسپات انجام نشد.");
+                    });
+                }}
+              />
+            </section>
+            <section className="flex min-w-0 flex-col gap-3">
+              <h2 className="text-lg font-medium text-fg">{tr("تحلیل اتریوم", "Ethereum analysis")}</h2>
+              {ethStatus === "loading" ? (
+                <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
+                  <p className="flex items-center gap-2 text-sm text-fg">
+                    <LoaderCircle className="size-4 animate-spin" />
+                    {tr("کندل روزانه اتریوم", "Ethereum daily candles")}
+                  </p>
+                </section>
+              ) : null}
+              {ethStatus === "error" ? (
+                <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
+                  <p className="text-sm text-down">{tr("تحلیل اتریوم کامل نشد", "The Ethereum plan did not finish")}</p>
+                  <p className="mt-2 text-sm text-muted">{ethError ? tr(ethError) : null}</p>
+                  <Button
+                    className="mt-4"
+                    onClick={() => {
+                      setEthStatus("loading");
+                      void load({ data: { assetId: "eth" } })
+                        .then((desk) => {
+                          setEthPlan(desk.plan);
+                          setEthFetchedAt(desk.fetchedAt);
+                          setEthStatus("ready");
+                        })
+                        .catch((err: unknown) => {
+                          setEthStatus("error");
+                          setEthError(err instanceof Error ? err.message : "تحلیل اتریوم انجام نشد.");
+                        });
+                    }}
+                  >
+                    {tr("تلاش دوباره", "Try again")}
+                  </Button>
+                </section>
+              ) : null}
+              {ethStatus === "ready" && ethPlan ? (
+                <PlanBody
+                  plan={ethPlan}
+                  fetchedAt={ethFetchedAt}
+                  onReload={() => {
+                    setEthStatus("loading");
+                    void load({ data: { assetId: "eth" } })
+                      .then((desk) => {
+                        setEthPlan(desk.plan);
+                        setEthFetchedAt(desk.fetchedAt);
+                        setEthStatus("ready");
+                      })
+                      .catch((err: unknown) => {
+                        setEthStatus("error");
+                        setEthError(err instanceof Error ? err.message : "تحلیل اتریوم انجام نشد.");
+                      });
+                  }}
+                />
+              ) : null}
+            </section>
+          </div>
+        ) : null}
+
+        {status === "ready" && plan && !paired ? (
           <PlanBody plan={plan} fetchedAt={fetchedAt} onReload={() => {
             if (!asset) return;
             setStatus("loading");

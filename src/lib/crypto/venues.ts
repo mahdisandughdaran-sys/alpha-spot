@@ -1,16 +1,14 @@
 import { candidateBases } from "./exclusions.ts";
 import { msg } from "@/lib/i18n/lex";
 
-export const VENUES = ["nobitex", "wallex", "ompfinex", "binance", "bybit"] as const;
+export const VENUES = ["wallex", "binance", "bybit"] as const;
 export type VenueId = (typeof VENUES)[number];
 export type QuoteCcy = "USDT" | "IRT";
 export type VenueAction = "probe" | "preview" | "place";
 export type VenueSide = "BUY" | "SELL";
 
 export const VENUE_LABEL: Record<VenueId, string> = {
-  nobitex: msg("نوبیتکس", "Nobitex"),
   wallex: msg("والکس", "Wallex"),
-  ompfinex: msg("اوام‌پی فینکس", "OMPFinex"),
   binance: msg("بایننس", "Binance"),
   bybit: msg("بای‌بیت", "Bybit"),
 };
@@ -126,35 +124,6 @@ export function planVenueOrder(
   const side = input.side === "SELL" ? "SELL" : "BUY";
   const qty = money(sized.qty, 6);
 
-  if (input.venue === "nobitex") {
-    const rial = input.quote === "IRT";
-    const price = money(
-      guardPrice(side, quotePrice({ priceUsd: input.priceUsd, quote: input.quote, tomanPerUsdt: input.tomanPerUsdt, rial })),
-      rial ? 0 : 6,
-    );
-    const body = {
-      type: side.toLowerCase(),
-      execution: "market",
-      srcCurrency: base.toLowerCase(),
-      dstCurrency: rial ? "rls" : "usdt",
-      amount: qty,
-      price,
-      clientOrderId: id,
-    };
-    return {
-      venue: input.venue,
-      summary: msg(
-        `نوبیتکس ${side === "BUY" ? "خرید" : "فروش"} مارکت ${qty} ${base} با سقف قیمت ${price} ${rial ? "ریال" : "تتر"}`,
-        `Nobitex ${side === "BUY" ? "buy" : "sell"} market ${qty} ${base} with a price cap of ${price} ${rial ? "rial" : "USDT"}`,
-      ),
-      method: "POST",
-      path: "/market/orders/add",
-      body,
-      query: null,
-      baseQty: sized.qty,
-    };
-  }
-
   if (input.venue === "wallex") {
     const tmn = input.quote === "IRT";
     const price = money(
@@ -177,28 +146,6 @@ export function planVenueOrder(
       ),
       method: "POST",
       path: "/v1/account/orders",
-      body,
-      query: null,
-      baseQty: sized.qty,
-    };
-  }
-
-  if (input.venue === "ompfinex") {
-    const irr = input.quote === "IRT";
-    const body = {
-      market: `${base}${irr ? "IRR" : "USDT"}`,
-      side: side.toLowerCase(),
-      type: "market",
-      amount: qty,
-    };
-    return {
-      venue: input.venue,
-      summary: msg(
-        `اوام‌پی فینکس ${side === "BUY" ? "خرید" : "فروش"} مارکت ${qty} ${body.market}`,
-        `OMPFinex ${side === "BUY" ? "buy" : "sell"} market ${qty} ${body.market}`,
-      ),
-      method: "POST",
-      path: "/v1/order",
       body,
       query: null,
       baseQty: sized.qty,
@@ -261,10 +208,6 @@ export function planVenueOrder(
 
 export function bybitSignPayload(timestamp: string, apiKey: string, recvWindow: string, body: string): string {
   return `${timestamp}${apiKey}${recvWindow}${body}`;
-}
-
-export function nobitexSignPayload(timestamp: string, method: string, path: string, body: string): string {
-  return `${timestamp}${method.toUpperCase()}${path}${body}`;
 }
 
 export function redact(text: string, secrets: string[]): string {

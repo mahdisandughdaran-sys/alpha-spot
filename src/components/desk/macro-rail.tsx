@@ -83,9 +83,9 @@ export function MacroRail({
       </dl>
 
       <div className="mt-4 border-t border-border pt-3">
-        <p className="text-xs text-subtle">{tr("اخبار فدرال رزرو و نرخ بهره", "Federal Reserve and rate news")}</p>
+        <p className="text-xs text-subtle">{tr("اخبار مهم کریپتو", "Important crypto news")}</p>
         {news == null ? <p className="mt-2 text-sm text-muted">{tr("در حال گرفتن فید…", "Fetching the feed…")}</p> : null}
-        {news?.note ? <p className="mt-2 text-sm text-muted">{tr(news.note, "The Fed feed did not answer. The calendar still stands.")}</p> : null}
+        {news?.note ? <p className="mt-2 text-sm text-muted">{tr(news.note)}</p> : null}
         <ul className="mt-2 flex flex-col gap-3">
           {items.map((item) => (
             <li key={item.link}>

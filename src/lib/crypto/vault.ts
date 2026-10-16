@@ -12,7 +12,7 @@ export type VenueVault = {
 };
 
 export const emptyVault: VenueVault = {
-  venue: "nobitex",
+  venue: "wallex",
   key: "",
   secret: "",
   quote: "USDT",
@@ -26,7 +26,7 @@ export function loadVault(): VenueVault {
     const raw = localStorage.getItem(KEY);
     if (!raw) return emptyVault;
     const parsed = JSON.parse(raw) as Partial<VenueVault>;
-    const venue = VENUES.includes(parsed.venue as VenueId) ? (parsed.venue as VenueId) : "nobitex";
+    const venue = VENUES.includes(parsed.venue as VenueId) ? (parsed.venue as VenueId) : "wallex";
     const quote: QuoteCcy = parsed.quote === "IRT" ? "IRT" : "USDT";
     return {
       ...emptyVault,

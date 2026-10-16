@@ -27,7 +27,7 @@ export const SPOT_ASSETS: SpotAsset[] = [
     nameFa: "اتریوم",
     nameEn: "Ethereum",
     pair: "ETHUSDT",
-    enabled: false,
+    enabled: true,
   },
   {
     id: "sol",

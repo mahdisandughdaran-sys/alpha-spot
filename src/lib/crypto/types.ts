@@ -1,5 +1,6 @@
 import type { OpportunityBoard } from "./opportunity.ts";
 import type { FlowState, MacroRiskView, SectorMomentum } from "./spot-analytics.ts";
+import type { VenueId } from "./venues.ts";
 
 export type FactorKey =
   | "rs"
@@ -189,7 +190,7 @@ export type AnalysisResult = {
   verdict: SpotVerdict;
   listingOk: boolean;
   horizon: "week" | "month";
-  venue: "nobitex" | "wallex" | "ompfinex" | "binance" | "bybit";
+  venue: VenueId;
   top: CoinRow[];
   reasons: string[];
   caution: string[];

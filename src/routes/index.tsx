@@ -117,8 +117,8 @@ function Home() {
         if (!stop) {
           setNews({
             items: [],
-            source: "Federal Reserve",
-            note: "فید فدرال رزرو الان جواب نداد. تقویم جلسه و تعطیل سر جایش است.",
+            source: "CoinDesk · Cointelegraph · Decrypt",
+            note: msg("فید اخبار کریپتو الان جواب نداد.", "The crypto news feed did not answer."),
           });
         }
       });
@@ -546,7 +546,7 @@ function Home() {
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
               <Button size="lg" variant="outline" asChild className="h-12 min-w-44">
                 <Link to="/spot/$assetId" params={{ assetId: "btc" }}>
-                  {tr("میز بیت‌کوین", "Bitcoin desk")}
+                  {tr("میز بیت‌کوین و اتریوم", "Bitcoin and Ethereum desk")}
                 </Link>
               </Button>
               <Button

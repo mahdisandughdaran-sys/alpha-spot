@@ -17,17 +17,6 @@ function addBase(out: Set<string>, value: unknown) {
   if (base) out.add(base);
 }
 
-export function basesFromNobitex(payload: unknown): string[] | null {
-  const stats = asRecord(asRecord(payload)?.stats);
-  if (!stats) return null;
-  const out = new Set<string>();
-  for (const key of Object.keys(stats)) {
-    const base = key.split("-")[0];
-    if (base) addBase(out, base);
-  }
-  return out.size ? [...out] : null;
-}
-
 export function basesFromWallex(payload: unknown): string[] | null {
   const result = asRecord(asRecord(payload)?.result) ?? asRecord(payload);
   const symbols = result?.symbols ?? result?.markets ?? asRecord(payload)?.markets;
@@ -39,32 +28,6 @@ export function basesFromWallex(payload: unknown): string[] | null {
   };
   if (Array.isArray(symbols)) symbols.forEach(take);
   else if (symbols && typeof symbols === "object") Object.values(symbols as Record<string, unknown>).forEach(take);
-  return out.size ? [...out] : null;
-}
-
-export function basesFromOmpfinex(payload: unknown): string[] | null {
-  const root = asRecord(payload);
-  const list = Array.isArray(payload)
-    ? payload
-    : Array.isArray(root?.data)
-      ? root.data
-      : Array.isArray(root?.markets)
-        ? root.markets
-        : Array.isArray(asRecord(root?.data)?.markets)
-          ? (asRecord(root?.data)?.markets as unknown[])
-          : null;
-  if (!list) return null;
-  const out = new Set<string>();
-  for (const item of list) {
-    const rec = asRecord(item);
-    if (!rec) continue;
-    const direct = rec.base_currency ?? rec.baseCurrency ?? rec.baseAsset ?? rec.base ?? rec.from;
-    if (direct) addBase(out, direct);
-    else if (typeof rec.symbol === "string") {
-      const cut = rec.symbol.replace(/[-_/]?(USDT|IRT|IRR|TMN|RLS)$/i, "");
-      addBase(out, cut);
-    }
-  }
   return out.size ? [...out] : null;
 }
 
@@ -115,9 +78,7 @@ export function basesFromBybit(payload: unknown): string[] | null {
 }
 
 export function parseVenueBases(venue: VenueId, payload: unknown): string[] | null {
-  if (venue === "nobitex") return basesFromNobitex(payload);
   if (venue === "wallex") return basesFromWallex(payload);
-  if (venue === "ompfinex") return basesFromOmpfinex(payload);
   if (venue === "binance") return basesFromBinance(payload);
   return basesFromBybit(payload);
 }

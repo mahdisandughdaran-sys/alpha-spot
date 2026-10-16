@@ -7,7 +7,7 @@ import { pullBalances, signEd25519 } from "./venues.server.ts";
 function call(partial: Partial<VenueCall>): VenueCall {
   return {
     action: "preview",
-    venue: "nobitex",
+    venue: "wallex",
     key: "",
     secret: "",
     symbol: "ETH",
@@ -21,22 +21,21 @@ function call(partial: Partial<VenueCall>): VenueCall {
   };
 }
 
-test("nobitex market buy keeps amount in base and price in tether", () => {
+test("wallex market buy keeps quantity and a protective tether price", () => {
   const plan = planVenueOrder(call({}), 1_700_000_000_000);
-  assert.equal(plan.path, "/market/orders/add");
-  assert.equal(plan.body?.srcCurrency, "eth");
-  assert.equal(plan.body?.dstCurrency, "usdt");
-  assert.equal(plan.body?.execution, "market");
-  assert.equal(plan.body?.amount, "0.04");
-  assert.equal(plan.body?.price, "2530");
+  assert.equal(plan.path, "/v1/account/orders");
+  assert.equal(plan.body?.symbol, "ETHUSDT");
+  assert.equal(plan.body?.type, "MARKET");
+  assert.equal(plan.body?.quantity, "0.04");
+  assert.equal(plan.body?.side, "BUY");
 });
 
-test("nobitex rial price is toman times ten", () => {
+test("wallex toman price uses the tether rate", () => {
   const plan = planVenueOrder(call({ quote: "IRT", tomanPerUsdt: 50_000 }));
   const price = Number(plan.body?.price);
-  assert.equal(plan.body?.dstCurrency, "rls");
-  assert.ok(price > 2500 * 50_000 * 10 * 0.98);
-  assert.ok(price < 2500 * 50_000 * 10 * 1.03);
+  assert.equal(plan.body?.symbol, "ETHTMN");
+  assert.ok(price > 2500 * 50_000 * 0.98);
+  assert.ok(price < 2500 * 50_000 * 1.03);
 });
 
 test("binance buy spends quote usdt and bybit does the same", () => {
@@ -57,7 +56,7 @@ test("redact strips the api key from exchange errors", () => {
   assert.equal(hidden.includes("abcdefghij"), false);
 });
 
-test("ed25519 nobitex signature verifies", () => {
+test("ed25519 signature verifies", () => {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const seed = privateKey.export({ format: "der", type: "pkcs8" }).subarray(-32);
   const message = "1700000000POST/market/orders/add{}";
