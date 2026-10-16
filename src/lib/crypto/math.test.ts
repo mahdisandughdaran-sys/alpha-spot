@@ -158,6 +158,7 @@ test("bitcoin season picks BTC when the alt lead is thin", () => {
     rs7d: -0.02,
   });
   const { pick } = pickWinner([alt, btc], "btc");
+  assert.ok(pick);
   assert.equal(pick.symbol, "BTC");
 });
 
@@ -172,6 +173,7 @@ test("low MC/FDV alts are ineligible", () => {
     distFrom30dHighPct: -0.12,
   });
   const { pick } = pickWinner([junk, btc], "neutral");
+  assert.ok(pick);
   assert.equal(pick.symbol, "BTC");
 });
 

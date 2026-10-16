@@ -1,4 +1,5 @@
 import type { OpportunityBoard } from "./opportunity.ts";
+import type { FlowState, MacroRiskView, SectorMomentum } from "./spot-analytics.ts";
 
 export type FactorKey =
   | "rs"
@@ -107,6 +108,13 @@ export type CoinRow = {
   unlockCliff: boolean;
   buySignal: BuySignal;
   sizeMultiplier: number;
+  fdvToMcap?: number | null;
+  inflationPenalty?: number;
+  accumulationScore?: number | null;
+  accumulationState?: FlowState | null;
+  sectorLabel?: string | null;
+  sectorMomentum?: number | null;
+  sectorBoost?: number | null;
   score: number;
   factors: FactorScore[];
 };
@@ -191,6 +199,8 @@ export type AnalysisResult = {
   portfolio: Sleeve[];
   books: BookCheck[];
   opportunities: OpportunityBoard;
+  macroRisk?: MacroRiskView;
+  sectors?: SectorMomentum[];
   dataCache: DataCache;
   cacheRows: number;
   cacheKlines: number;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -544,6 +544,11 @@ function Home() {
               ) : null}
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              <Button size="lg" variant="outline" asChild className="h-12 min-w-44">
+                <Link to="/spot/$assetId" params={{ assetId: "btc" }}>
+                  {tr("میز بیت‌کوین", "Bitcoin desk")}
+                </Link>
+              </Button>
               <Button
                 size="lg"
                 variant="outline"

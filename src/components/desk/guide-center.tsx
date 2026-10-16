@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { BookOpen } from "lucide-react";
 import type { AnalysisResult } from "@/lib/crypto/types";
-import { buildAtrPlan } from "@/lib/crypto/spot-analytics";
+import { buildAtrPlan, type FlowState } from "@/lib/crypto/spot-analytics";
 import { formatPct, formatUsd } from "./format";
 
 const CHAPTERS = [
@@ -133,8 +133,9 @@ function Live({ id, result }: { id: ChapterId; result: AnalysisResult | null }) 
 
   const pick = result.pick;
   const book = result.books.find((row) => row.symbol === pick.symbol);
-  const leader = result.sectors[0];
-  const cut = Math.min(pick.sizeMultiplier, result.macroRisk.sizeMultiplier);
+  const leader = result.sectors?.[0];
+  const macro = result.macroRisk;
+  const cut = Math.min(pick.sizeMultiplier, macro?.sizeMultiplier ?? pick.sizeMultiplier);
   const plan = buildAtrPlan({
     price: pick.priceUsd,
     volatility30d: pick.volatility30d,
@@ -143,7 +144,9 @@ function Live({ id, result }: { id: ChapterId; result: AnalysisResult | null }) 
 
   let text = "";
   if (id === "macro") {
-    text = `${result.macroRisk.headline}. ${result.macroRisk.advice}`;
+    text = macro
+      ? `${macro.headline}. ${macro.advice}`
+      : "ریسک کلان در این اجرا جداگانه ننشست.";
   } else if (id === "unlock") {
     text =
       pick.unlockPct30d == null
@@ -177,7 +180,7 @@ function Live({ id, result }: { id: ChapterId; result: AnalysisResult | null }) 
   return <p className="mt-4 rounded-md bg-bg px-3 py-3 text-sm leading-relaxed text-fg">{text}</p>;
 }
 
-function flowLabel(state: AnalysisResult["pick"]["accumulationState"]): string {
+function flowLabel(state: FlowState | null | undefined): string {
   if (state === "accumulation") return "انباشت";
   if (state === "distribution") return "توزیع";
   if (state === "neutral") return "خنثی";

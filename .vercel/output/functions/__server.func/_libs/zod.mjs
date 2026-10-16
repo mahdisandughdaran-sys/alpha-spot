@@ -1013,7 +1013,6 @@ function datetime(args) {
 }
 var anyString = /^[\s\S]{0,}$/;
 var number$1 = /^-?\d+(?:\.\d+)?$/;
-var boolean$1 = /^(?:true|false)$/i;
 var lowercase = /^[^A-Z]*$/;
 var uppercase = /^[^a-z]*$/;
 //#endregion
@@ -1817,24 +1816,6 @@ var $ZodNumberFormat = /*@__PURE__*/ $constructor("$ZodNumberFormat", (inst, def
 	$ZodCheckNumberFormat.init(inst, def);
 	$ZodNumber.init(inst, def);
 });
-var $ZodBoolean = /*@__PURE__*/ $constructor("$ZodBoolean", (inst, def) => {
-	$ZodType.init(inst, def);
-	inst._zod.pattern = boolean$1;
-	inst._zod.parse = (payload, _ctx) => {
-		if (def.coerce) try {
-			payload.value = Boolean(payload.value);
-		} catch (_) {}
-		const input = payload.value;
-		if (typeof input === "boolean") return payload;
-		payload.issues.push({
-			expected: "boolean",
-			code: "invalid_type",
-			input,
-			inst
-		});
-		return payload;
-	};
-});
 var $ZodUnknown = /*@__PURE__*/ $constructor("$ZodUnknown", (inst, def) => {
 	$ZodType.init(inst, def);
 	inst._zod.parse = (payload) => payload;
@@ -2548,9 +2529,6 @@ function handlePipeResult(left, next, ctx) {
 		issues: left.issues
 	}, ctx);
 }
-var $ZodPreprocess = /*@__PURE__*/ $constructor("$ZodPreprocess", (inst, def) => {
-	$ZodPipe.init(inst, def);
-});
 var $ZodReadonly = /*@__PURE__*/ $constructor("$ZodReadonly", (inst, def) => {
 	$ZodType.init(inst, def);
 	defineLazyInternal(inst, "propValues", (zod) => zod.def.innerType._zod.propValues);
@@ -3298,13 +3276,6 @@ function _int(Class, params) {
 		check: "number_format",
 		abort: false,
 		format: "safeint",
-		...normalizeParams(params)
-	});
-}
-// @__NO_SIDE_EFFECTS__
-function _boolean(Class, params) {
-	return new Class({
-		type: "boolean",
 		...normalizeParams(params)
 	});
 }
@@ -4087,9 +4058,6 @@ var numberProcessor = (schema, ctx, _json, params) => {
 		if (rest.length) json.allOf = [...json.allOf ?? [], ...rest.map((m) => ({ multipleOf: m }))];
 	}
 };
-var booleanProcessor = (_schema, _ctx, json, _params) => {
-	json.type = "boolean";
-};
 var neverProcessor = (_schema, _ctx, json, _params) => {
 	json.not = {};
 };
@@ -4862,14 +4830,6 @@ var ZodNumberFormat = /*@__PURE__*/ $constructor("ZodNumberFormat", (inst, def) 
 function int(params) {
 	return /* @__PURE__ */ _int(ZodNumberFormat, params);
 }
-var ZodBoolean = /*@__PURE__*/ $constructor("ZodBoolean", (inst, def) => {
-	$ZodBoolean.init(inst, def);
-	ZodType.init(inst, def);
-	inst._zod.processJSONSchema = (ctx, json, params) => booleanProcessor(inst, ctx, json, params);
-});
-function boolean(params) {
-	return /* @__PURE__ */ _boolean(ZodBoolean, params);
-}
 var ZodUnknown = /*@__PURE__*/ $constructor("ZodUnknown", (inst, def) => {
 	$ZodUnknown.init(inst, def);
 	ZodType.init(inst, def);
@@ -5189,10 +5149,6 @@ function pipe(in_, out) {
 		out
 	});
 }
-var ZodPreprocess = /*@__PURE__*/ $constructor("ZodPreprocess", (inst, def) => {
-	ZodPipe.init(inst, def);
-	$ZodPreprocess.init(inst, def);
-});
 var ZodReadonly = /*@__PURE__*/ $constructor("ZodReadonly", (inst, def) => {
 	$ZodReadonly.init(inst, def);
 	ZodType.init(inst, def);
@@ -5216,12 +5172,5 @@ function refine(fn, _params = {}) {
 function superRefine(fn, params) {
 	return /* @__PURE__ */ _superRefine(fn, params);
 }
-function preprocess(fn, schema) {
-	return new ZodPreprocess({
-		type: "pipe",
-		in: transform(fn),
-		out: schema
-	});
-}
 //#endregion
-export { number as a, string as c, literal as i, union as l, array as n, object as o, boolean as r, preprocess as s, _enum as t };
+export { union as a, string as i, number as n, object as r, literal as t };

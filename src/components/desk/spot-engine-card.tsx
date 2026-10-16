@@ -18,13 +18,13 @@ export function SpotEngineCard({
 }) {
   const pick = result.pick;
   const macro = result.macroRisk;
-  const cut = Math.min(pick.sizeMultiplier, macro.sizeMultiplier);
+  const cut = Math.min(pick.sizeMultiplier, macro?.sizeMultiplier ?? pick.sizeMultiplier);
   const plan = buildAtrPlan({
     price,
     volatility30d: pick.volatility30d,
     sizeMultiplier: cut,
   });
-  const leader = result.sectors[0];
+  const leader = result.sectors?.[0];
   const flow = pick.accumulationState ? FLOW_LABEL[pick.accumulationState] : "—";
 
   return (
@@ -38,14 +38,14 @@ export function SpotEngineCard({
         </div>
         <p
           className={
-            macro.level === "severe"
+            macro?.level === "severe"
               ? "text-sm text-down"
-              : macro.level === "elevated"
+              : macro?.level === "elevated"
                 ? "text-sm text-warn"
                 : "text-sm text-up"
           }
         >
-          {macro.headline}
+          {macro?.headline ?? "ریسک کلان جدا نیامد"}
         </p>
       </div>
 
@@ -97,7 +97,7 @@ export function SpotEngineCard({
           tip={plan?.note ?? "حد ضرر ۲٫۲ برابر ATR تقریبی زیر قیمت است و با همان فاصله دنبال می‌شود."}
         />
       </dl>
-      {macro.level !== "calm" ? (
+      {macro && macro.level !== "calm" ? (
         <p className="mt-4 text-sm leading-relaxed text-muted">{macro.advice}</p>
       ) : null}
     </section>

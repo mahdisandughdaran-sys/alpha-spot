@@ -70,7 +70,7 @@ export function HistoryPanel({ runs }: { runs: RunSummary[] }) {
                       : tr("خنثی", "Neutral")}
                 </td>
                 <td className="num px-4 py-3 text-muted">
-                  {run.dominance.toFixed(1)}
+                  {run.dominance == null ? "—" : run.dominance.toFixed(1)}
                   {pct}
                 </td>
                 <td className="num px-4 py-3 text-muted">{formatPct(run.rs7d)}</td>
