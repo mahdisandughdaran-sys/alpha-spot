@@ -8,7 +8,9 @@ const FACTORS: FactorKey[] = ["rs", "tokenomics", "entry", "trend", "liquidity",
 export const runSpotAnalysis = createServerFn({ method: "POST" })
   .validator((input: { venue?: string; horizon?: string; cuts?: Record<string, unknown> }) => {
     if (!input || !isVenue(String(input.venue ?? ""))) throw new Error("صرافی نامعتبر است.");
-    if (input.horizon !== "week" && input.horizon !== "month") throw new Error("افق نامعتبر است.");
+    if (input.horizon !== "day" && input.horizon !== "week" && input.horizon !== "month") {
+      throw new Error("افق نامعتبر است.");
+    }
     const cuts: WeightCuts = {};
     if (input.cuts && typeof input.cuts === "object") {
       for (const key of FACTORS) {

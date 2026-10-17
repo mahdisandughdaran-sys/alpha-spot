@@ -29,6 +29,18 @@ export function formatScore(n: number): string {
   return n.toFixed(1);
 }
 
+export function formatUntil(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(getLocale() === "en" ? "en-GB" : "fa-IR", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Tehran",
+  });
+}
+
 export function timeAgoFa(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";

@@ -20,7 +20,7 @@ export function loadPrefs(): DeskPrefs | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DeskPrefs;
     if (!parsed || !isVenue(parsed.venue)) return null;
-    if (parsed.horizon !== "week" && parsed.horizon !== "month") return null;
+    if (parsed.horizon !== "day" && parsed.horizon !== "week" && parsed.horizon !== "month") return null;
     return parsed;
   } catch {
     return null;

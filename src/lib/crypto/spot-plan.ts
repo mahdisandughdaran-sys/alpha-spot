@@ -1,4 +1,6 @@
 import { detectWeeklyStructure, ema, rsi } from "./math.ts";
+import type { Horizon } from "./lens.ts";
+import { VALID_MS } from "./validity.ts";
 
 export type SpotCandle = {
   t: number;
@@ -13,6 +15,15 @@ export type SpotRegime = "bull" | "bear" | "range";
 export type SpotAction = "buy" | "wait" | "exit";
 export type SpotSize = "full" | "half" | "none";
 export type SpotConfidence = "high" | "medium" | "low";
+export type SpotWindow = {
+  horizon: Horizon;
+  action: "buy" | "cash";
+  validForMs: number;
+  titleFa: string;
+  titleEn: string;
+  noteFa: string;
+  noteEn: string;
+};
 
 export type SpotChartPoint = {
   t: number;
@@ -52,6 +63,12 @@ export type SpotPlan = {
   touchIndex: number | null;
   headlineFa: string;
   headlineEn: string;
+  /** The order the desk stands behind: buy for a named window, or buy nothing. */
+  orderFa: string;
+  orderEn: string;
+  windows: SpotWindow[];
+  holdFa?: string | null;
+  holdEn?: string | null;
   buyFa: string;
   buyEn: string;
   sellUpFa: string;
@@ -259,6 +276,13 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
     emaDist,
     monthLow,
   });
+  const stance = buildWindows({ action, regime, weekly, rsi14, confidence });
+  if (!stance.windows.some((window) => window.action === "buy")) {
+    copy.headlineFa = stance.orderFa;
+    copy.headlineEn = stance.orderEn;
+    copy.buyFa = `هیچ ارزی نخر. ناحیه ${formatSpotUsd(buyFrom)} تا ${formatSpotUsd(buyTo)} فقط تماشاست و بهترین نقطه تماشا ${formatSpotUsd(entry)} است، نه دستور خرید.`;
+    copy.buyEn = `Do not buy any coin. ${formatSpotUsd(buyFrom)} to ${formatSpotUsd(buyTo)} is only a watch zone. ${formatSpotUsd(entry)} is a level to watch, not a buy order.`;
+  }
 
   const notes =
     candles.length < 80
@@ -301,6 +325,11 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
     touchIndex,
     chart,
     ...copy,
+    orderFa: stance.orderFa,
+    orderEn: stance.orderEn,
+    windows: stance.windows,
+    holdFa: null,
+    holdEn: null,
     notes,
   };
 }
@@ -335,16 +364,16 @@ function sentences(input: {
 
   const headlineFa =
     input.action === "buy"
-      ? `${name} داخل ناحیه خرید است. بهترین نقطه ورود ${entry} است.`
+      ? `${name} داخل ناحیه خرید است. بهترین نقطه ورود ${entry} است. ببین این خرید برای یک روز است، یک هفته، یا یک ماه.`
       : input.action === "exit"
-        ? `${name} از حد خروج پایین‌تر رفته. اگر پوزیشن اسپات داری بفروش و خرید تازه را متوقف کن.`
-        : `بهترین ورود اسپات ${name} روی ${entry} است. تا وقتی قیمت به این ناحیه نرسیده، تعقیب نکن.`;
+        ? `هیچ ارزی نخر. ${name} از حد خروج پایین‌تر رفته. اگر پوزیشن اسپات داری بفروش.`
+        : `هیچ ارزی نخر. وقت خرید اسپات ${name} نیست. ناحیه ${entry} فقط تماشاست، نه دستور خرید.`;
   const headlineEn =
     input.action === "buy"
-      ? `${nameEn} is inside the buy zone. The best entry is ${entry}.`
+      ? `${nameEn} is inside the buy zone. The best entry is ${entry}. Check whether that buy is for one day, one week, or one month.`
       : input.action === "exit"
-        ? `${nameEn} is through the exit. Sell a spot position you still hold, and do not open a new one.`
-        : `The best ${nameEn} spot entry is ${entry}. Do not chase until price comes back to that zone.`;
+        ? `Do not buy any coin. ${nameEn} is through the exit. Sell a spot position you still hold.`
+        : `Do not buy any coin. It is not time to buy ${nameEn} spot. ${entry} is a level to watch, not a buy order.`;
 
   const buyFa =
     input.action === "exit"
@@ -457,6 +486,66 @@ function sentences(input: {
     sellDownFa,
     sellDownEn,
     notes: notes.slice(0, 5),
+  };
+}
+
+function buildWindows(input: {
+  action: SpotAction;
+  regime: SpotRegime;
+  weekly: SpotRegime;
+  rsi14: number | null;
+  confidence: SpotConfidence;
+}): { windows: SpotWindow[]; orderFa: string; orderEn: string } {
+  const dayBuy = input.action === "buy" && input.regime !== "bear" && (input.rsi14 == null || input.rsi14 < 68);
+  const weekBuy = dayBuy && input.weekly !== "bear";
+  const monthBuy = weekBuy && input.regime === "bull" && input.weekly === "bull" && input.confidence !== "low";
+  const open: Record<Horizon, boolean> = { day: dayBuy, week: weekBuy, month: monthBuy };
+  const titles: Record<Horizon, [string, string]> = {
+    day: ["یک روز", "One day"],
+    week: ["یک هفته", "One week"],
+    month: ["یک ماه", "One month"],
+  };
+  const windows: SpotWindow[] = (["day", "week", "month"] as const).map((horizon) => {
+    const buy = open[horizon];
+    return {
+      horizon,
+      action: buy ? "buy" : "cash",
+      validForMs: VALID_MS[horizon],
+      titleFa: titles[horizon][0],
+      titleEn: titles[horizon][1],
+      noteFa: buy
+        ? "در این بازه بخر. تا پایان اعتبار عوض نمی‌شود، مگر قیمت از حد پایین رد شود."
+        : "در این بازه هیچ ارزی نخر.",
+      noteEn: buy
+        ? "Buy inside this window. It does not change before it expires, unless price crosses the lower level."
+        : "Do not buy any coin inside this window.",
+    };
+  });
+  if (monthBuy) {
+    return {
+      windows,
+      orderFa: "برای یک ماه بخر. این حکم تا سی روز معتبر است و وسط ماه عوض نمی‌شود.",
+      orderEn: "Buy for one month. This call is valid for thirty days and does not change in the middle of the month.",
+    };
+  }
+  if (weekBuy) {
+    return {
+      windows,
+      orderFa: "فقط برای یک هفته بخر. حکم ماه می‌گوید هیچ ارزی نخر.",
+      orderEn: "Buy for one week only. The month call says do not buy any coin.",
+    };
+  }
+  if (dayBuy) {
+    return {
+      windows,
+      orderFa: "فقط برای یک روز بخر. فردا این حرف می‌تواند عوض شود. برای هفته و ماه هیچ ارزی نخر.",
+      orderEn: "Buy for one day only. Tomorrow this sentence may change. For the week and the month, do not buy any coin.",
+    };
+  }
+  return {
+    windows,
+    orderFa: "هیچ ارزی نخر. وقت خرید اسپات نیست.",
+    orderEn: "Do not buy any coin. It is not time for a spot buy.",
   };
 }
 

@@ -27,6 +27,7 @@ import { ExecutePanel } from "@/components/desk/execute-panel";
 import { VenuePanel } from "@/components/desk/venue-panel";
 import { OpportunityPanel } from "@/components/desk/opportunity-panel";
 import { ConfluencePanel } from "@/components/desk/confluence-panel";
+import { ValidityBoard } from "@/components/desk/validity-board";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
 import type { WeightCuts } from "@/lib/crypto/lens";
 import { loadPrefs, savePrefs, type DeskPrefs } from "@/lib/crypto/prefs";
@@ -42,6 +43,7 @@ import {
   type StoredSuggestion,
 } from "@/lib/crypto/report-card";
 import { verdictSentence } from "@/lib/crypto/verdict";
+import { sealAnalysis } from "@/lib/crypto/validity";
 import { VENUE_LABEL } from "@/lib/crypto/venues";
 import {
   hasSeen,
@@ -397,17 +399,33 @@ function Home() {
   }
 
   function rememberAndSnapshot(data: AnalysisResult) {
+    const priceOf = (sym: string) => {
+      if (sym === "BTC") return data.btcPriceUsd;
+      return data.top.find((item) => item.symbol === sym)?.priceUsd ?? null;
+    };
+    if (data.verdict.kind !== "buy" || !data.verdict.symbol) {
+      const settled = settleReport(loadSuggestions(), priceOf, data.btcPriceUsd, loadCuts());
+      saveSuggestions(settled.rows);
+      saveCuts(settled.cuts);
+      return {
+        rows: settled.rows,
+        buckets: regimeBuckets(settled.rows, priceOf, data.btcPriceUsd),
+        cuts: settled.cuts,
+        lagged: settled.lagged,
+        weak: settled.weak,
+      };
+    }
     const verdict = data.verdict;
-    const symbol = verdict.symbol ?? "BTC";
+    const symbol = verdict.symbol;
     const row = data.top.find((item) => item.symbol === symbol) ?? data.pick;
     const stored: StoredSuggestion = {
       id: `${data.generatedAt}:${verdict.kind}:${symbol}`,
       at: data.generatedAt,
       symbol,
       name: verdict.name ?? row.name,
-      priceUsd: verdict.kind === "stay" ? data.btcPriceUsd : (verdict.priceUsd ?? row.priceUsd),
+      priceUsd: verdict.priceUsd ?? row.priceUsd,
       btcPriceUsd: data.btcPriceUsd,
-      kind: verdict.kind,
+      kind: "buy",
       regime: data.regime,
       factors: row.factors.map((factor) => ({ key: factor.key, score: factor.score })),
       applied7: false,
@@ -416,10 +434,6 @@ function Home() {
     const saved = rememberSuggestion(loadSuggestions(), stored);
     saveSuggestions(saved);
     const cuts = loadCuts();
-    const priceOf = (sym: string) => {
-      if (sym === "BTC") return data.btcPriceUsd;
-      return data.top.find((item) => item.symbol === sym)?.priceUsd ?? null;
-    };
     const settled = settleReport(saved, priceOf, data.btcPriceUsd, cuts);
     saveSuggestions(settled.rows);
     saveCuts(settled.cuts);
@@ -445,7 +459,7 @@ function Home() {
     }, 1100);
     try {
       const cuts = await settleStored();
-      const data = await run({ data: { venue: desk.venue, horizon: desk.horizon, cuts } });
+      const data = sealAnalysis(await run({ data: { venue: desk.venue, horizon: desk.horizon, cuts } }), desk.venue);
       setResult(data);
       setHistory(saveRun(data));
       setReport(rememberAndSnapshot(data));
@@ -519,8 +533,8 @@ function Home() {
               ) : (
                 <p className="mt-3 text-base leading-relaxed text-muted">
                   {tr(
-                    "یک جمله: بخر، صبر کن، یا در بیت‌کوین بمان. صرافی و افق را بگویید تا همان جمله ساخته شود.",
-                    "One sentence: buy, wait, or stay in Bitcoin. Say the exchange and the horizon, and that sentence is built.",
+                    "سه حکم جدا: یک روز، یک هفته، یک ماه. حکم هفته و ماه تا پایان اعتبار عوض نمی‌شود. اگر وقت خرید اسپات نباشد، جواب این است که هیچ ارزی نخری.",
+                    "Three separate calls: one day, one week, one month. The week and month calls do not change before they expire. If it is not time to buy spot, the answer is to buy no coin.",
                   )}
                 </p>
               )}
@@ -528,7 +542,11 @@ function Home() {
                 <p className="mt-3 text-xs text-subtle">
                   {tr(VENUE_LABEL[prefs.venue])}
                   {" · "}
-                  {prefs.horizon === "week" ? tr("یک هفته", "One week") : tr("یک ماه", "One month")}
+                  {prefs.horizon === "day"
+                    ? tr("یک روز", "One day")
+                    : prefs.horizon === "week"
+                      ? tr("یک هفته", "One week")
+                      : tr("یک ماه", "One month")}
                   <button
                     type="button"
                     className="ms-3 text-fg"
@@ -626,6 +644,7 @@ function Home() {
 
         {status === "done" && result ? (
           <>
+            <ValidityBoard calls={result.calls ?? []} active={result.horizon} />
             {report && tab !== "method" ? (
               <ReportCard
                 rows={report.rows}
@@ -646,7 +665,7 @@ function Home() {
             />
             <SymbolTape
               rows={result.top}
-              picked={result.verdict.kind === "stay" ? "" : (result.verdict.symbol ?? "")}
+              picked={result.verdict.kind === "buy" ? (result.verdict.symbol ?? "") : ""}
               live={live}
             />
             <nav className="flex gap-1 overflow-x-auto rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
@@ -689,7 +708,7 @@ function Home() {
             {tab === "table" ? (
               <Leaderboard
                 rows={applyDeskFilter(result.top, lens)}
-                picked={result.verdict.kind === "stay" ? "" : (result.verdict.symbol ?? result.pick.symbol)}
+                picked={result.verdict.kind === "buy" ? (result.verdict.symbol ?? result.pick.symbol) : ""}
                 watched={watched}
                 onToggleWatch={(symbol) => setWatched(toggleWatch(symbol))}
                 live={live}

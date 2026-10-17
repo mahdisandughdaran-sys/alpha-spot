@@ -9,24 +9,18 @@ export type { SpotVerdict, VerdictKind };
 
 export function verdictSentence(kind: VerdictKind): string {
   if (kind === "buy") return msg("الان این را بخر", "Buy this now");
-  if (kind === "wait") {
-    return msg(
-      "این بهترین نام است ولی هنوز وقت خریدش نیست",
-      "This is the best name, but it is not time to buy it yet",
-    );
-  }
-  return msg("الان هیچ آلتی نخر؛ بیت‌کوین بماند", "Do not buy any alt now; stay in Bitcoin");
+  return msg("هیچ ارزی نخر", "Do not buy any coin");
 }
 
-function stay(reason: string): SpotVerdict {
+function cashOut(fa: string, en: string): SpotVerdict {
   return {
-    kind: "stay",
+    kind: "cash",
     symbol: null,
     name: null,
     priceUsd: null,
     reachUsd: null,
     invalidationUsd: null,
-    reason,
+    reason: msg(fa, en),
   };
 }
 
@@ -61,27 +55,37 @@ function zonePrices(opp: Opportunity | undefined): { reach: number; kill: number
 }
 
 function buyReason(row: CoinRow, horizon: Horizon): string {
-  if (horizon === "week") {
+  if (horizon === "day") {
     return msg(
-      `قدرت نسبی ۷روزه و نقطهٔ ورود هم‌خوان‌اند و قیمت داخل محدوده است.`,
-      `7-day relative strength and the entry line up, and the price is inside the buy zone.`,
+      "حکم یک‌روزه است و فقط ۲۴ ساعت معتبر می‌ماند. قدرت ۲۴ساعته با نقطه ورود هم‌خوان است؛ فردا این حرف می‌تواند عوض شود.",
+      "This is a one-day call, valid for 24 hours. The 24-hour strength agrees with the entry; tomorrow this sentence may change.",
     );
   }
-  const weekly =
+  if (horizon === "week") {
+    return msg(
+      "حکم یک‌هفته‌ای است و تا هفت روز عوض نمی‌شود، مگر قیمت حد ابطال را بشکند. قدرت نسبی ۷روزه و نقطه ورود هم‌خوان‌اند.",
+      "This is a one-week call. It does not change for seven days unless price breaks invalidation. 7-day strength and the entry agree.",
+    );
+  }
+  const weeklyFa =
     row.weeklyStructure === "bull"
-      ? msg("ساختار هفتگی صعودی است", "Weekly structure is bullish")
+      ? "ساختار هفتگی صعودی است"
       : row.weeklyStructure === "bear"
-        ? msg("ساختار هفتگی نزولی است", "Weekly structure is bearish")
-        : msg("ساختار هفتگی رنج است", "Weekly structure is a range");
-  const ema =
-    row.aboveEma200 === true
-      ? msg("بالای EMA۲۰۰", "above the 200 EMA")
-      : row.aboveEma200 === false
-        ? msg("زیر EMA۲۰۰", "below the 200 EMA")
-        : msg("EMA۲۰۰ نامشخص", "200 EMA unknown");
+        ? "ساختار هفتگی نزولی است"
+        : "ساختار هفتگی رنج است";
+  const weeklyEn =
+    row.weeklyStructure === "bull"
+      ? "weekly structure is bullish"
+      : row.weeklyStructure === "bear"
+        ? "weekly structure is bearish"
+        : "weekly structure is a range";
+  const emaFa =
+    row.aboveEma200 === true ? "بالای EMA۲۰۰" : row.aboveEma200 === false ? "زیر EMA۲۰۰" : "EMA۲۰۰ نامشخص";
+  const emaEn =
+    row.aboveEma200 === true ? "above the 200 EMA" : row.aboveEma200 === false ? "below the 200 EMA" : "200 EMA unknown";
   return msg(
-    `افق یک‌ماهه: بازده ۳۰روزه، ${ema} و ${weekly}.`,
-    `One-month horizon: the 30-day return, ${ema}, and ${weekly}.`,
+    `حکم یک‌ماهه است و تا سی روز عوض نمی‌شود، مگر ساختار هفتگی یا EMA۲۰۰ بشکند. ${emaFa} و ${weeklyFa}.`,
+    `This is a one-month call. It does not change for thirty days unless weekly structure or the 200 EMA breaks. ${emaEn}, and ${weeklyEn}.`,
   );
 }
 
@@ -98,44 +102,35 @@ export function buildVerdict(input: {
   horizon: Horizon;
 }): SpotVerdict {
   if (input.kill.status === "SUSPENDED") {
-    return stay(
-      msg(
-        "کلید قطع بیت‌کوین فعال است؛ هیچ آلتی خریده نمی‌شود.",
-        "The Bitcoin kill-switch is on; no alt is bought.",
-      ),
+    return cashOut(
+      "هیچ ارزی نخر. کلید قطع بیت‌کوین فعال است و خرید اسپات بسته است.",
+      "Do not buy any coin. The Bitcoin kill-switch is on and spot buys are closed.",
     );
   }
 
   const { pick, refused, viaSeasonRule } = pickWinner(input.ranked, input.regime, input.kill);
-  if (refused || !pick || viaSeasonRule) {
-    return stay(
+  if (refused || !pick) {
+    return cashOut(
       refused
-        ? msg(
-            "هیچ ارزی از فیلتر حجم، سقف ۳۰روزه و توکنومیکس رد نشد.",
-            "No coin cleared the volume, 30-day-high, and tokenomics filters.",
-          )
-        : msg(
-            "در فصل بیت‌کوین فاصله با بیت‌کوین به ۳٫۵ امتیاز نرسید.",
-            "In Bitcoin season the lead over Bitcoin was under 3.5 points.",
-          ),
+        ? "هیچ ارزی نخر. هیچ ارزی از فیلتر حجم، سقف ۳۰روزه و توکنومیکس رد نشد."
+        : "هیچ ارزی نخر. از این داده انتخابی ساخته نشد.",
+      refused
+        ? "Do not buy any coin. No coin cleared the volume, 30-day-high, and tokenomics filters."
+        : "Do not buy any coin. This tape did not produce a pick.",
     );
   }
 
   if (pick.symbol !== "BTC" && input.listed == null) {
-    return stay(
-      msg(
-        "فهرست تأیید نشد؛ خرید آلت صادر نمی‌شود.",
-        "The exchange list was not confirmed, so no alt buy is issued.",
-      ),
+    return cashOut(
+      "هیچ ارزی نخر. فهرست تأیید نشد؛ خرید اسپات صادر نمی‌شود.",
+      "Do not buy any coin. The exchange list was not confirmed, so no spot buy is issued.",
     );
   }
 
   if (pick.symbol !== "BTC" && !isListed(pick.symbol, input.listed)) {
-    return stay(
-      msg(
-        `${pick.symbol} در صرافی انتخاب‌شده تأیید نشد، پس خرید آلت صادر نمی‌شود.`,
-        `${pick.symbol} is not confirmed on the selected exchange, so no alt buy is issued.`,
-      ),
+    return cashOut(
+      `هیچ ارزی نخر. ${pick.symbol} در صرافی انتخاب‌شده تأیید نشد.`,
+      `Do not buy any coin. ${pick.symbol} is not confirmed on the selected exchange.`,
     );
   }
 
@@ -147,37 +142,42 @@ export function buildVerdict(input: {
       name: pick.name,
       priceUsd: pick.priceUsd,
       reachUsd: null,
-      invalidationUsd: null,
+      invalidationUsd: opp?.zone?.invalidation ?? null,
       reason: buyReason(pick, input.horizon),
     };
   }
 
+  if (viaSeasonRule) {
+    return cashOut(
+      "هیچ ارزی نخر. در فصل بیت‌کوین فاصله با بیت‌کوین به ۳٫۵ امتیاز نرسید و خود بیت‌کوین هم در ناحیه خرید اسپات نیست.",
+      "Do not buy any coin. In Bitcoin season the lead over Bitcoin was under 3.5 points, and Bitcoin itself is not in a spot buy zone.",
+    );
+  }
+
   const levels = zonePrices(opp);
   if (!levels) {
-    return stay(
-      msg(
-        "بهترین نام مجاز در محدودهٔ خرید نیست و سطح عددی رسیدن و ابطال هم در داده نیست.",
-        "The best allowed name is not in a buy zone, and the tape has no numeric reach or invalidation.",
-      ),
+    return cashOut(
+      "هیچ ارزی نخر. وقت خرید اسپات نیست؛ بهترین نام مجاز در محدوده خرید نیست.",
+      "Do not buy any coin. It is not time for a spot buy; the best allowed name is not in a buy zone.",
     );
   }
 
   const rsiHot = pick.rsi14 != null && pick.rsi14 > 78;
   return {
-    kind: "wait",
-    symbol: pick.symbol,
-    name: pick.name,
-    priceUsd: pick.priceUsd,
+    kind: "cash",
+    symbol: null,
+    name: null,
+    priceUsd: null,
     reachUsd: levels.reach,
     invalidationUsd: levels.kill,
     reason: rsiHot
       ? msg(
-          `RSI ${pick.rsi14?.toFixed(0)} بالای ۷۸ است؛ تا برگشت از اشباع خریده نمی‌شود.`,
-          `RSI ${pick.rsi14?.toFixed(0)} is above 78; it is not bought until that cools.`,
+          `هیچ ارزی نخر. وقت خرید اسپات نیست؛ RSI ${pick.symbol} روی ${pick.rsi14?.toFixed(0)} داغ است.`,
+          `Do not buy any coin. It is not time for a spot buy; ${pick.symbol} RSI is ${pick.rsi14?.toFixed(0)} and hot.`,
         )
       : msg(
-          "قیمت هنوز به محدودهٔ خرید یا تأیید نرسیده است.",
-          "Price is not in the buy zone and is not confirmed.",
+          `هیچ ارزی نخر. وقت خرید اسپات نیست؛ ${pick.symbol} هنوز به محدوده خرید نرسیده.`,
+          `Do not buy any coin. It is not time for a spot buy; ${pick.symbol} is not in the buy zone yet.`,
         ),
   };
 }

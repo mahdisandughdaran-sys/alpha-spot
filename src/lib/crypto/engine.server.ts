@@ -20,10 +20,11 @@ import { fromBinanceTickers, fromCoinGecko } from "./universe-fallback.ts";
 import { applyLens, type Horizon, type WeightCuts } from "./lens.ts";
 import { loadVenueListing } from "./listings.server.ts";
 import { buildVerdict } from "./verdict.ts";
+import { callFromVerdict, cashCall, verdictFromCall, HORIZON_ORDER } from "./validity.ts";
 import { sessionCalendar } from "./session-calendar.ts";
 import type { VenueId } from "./venues.ts";
 import { msg } from "@/lib/i18n/lex";
-import type { AnalysisResult, BookCheck, CoinDraft, DataCache, PairPoint, UnlockAssessment } from "./types.ts";
+import type { AnalysisResult, BookCheck, CoinDraft, CoinRow, DataCache, HorizonCall, PairPoint, UnlockAssessment } from "./types.ts";
 
 const PAPRIKA = "https://api.coinpaprika.com/v1";
 const BINANCE = "https://data-api.binance.vision/api/v3";
@@ -80,7 +81,7 @@ function cacheKey(run: DeskRun): string {
     .sort()
     .map((key) => `${key}:${Number(cuts[key]).toFixed(4)}`)
     .join(",");
-  return `analysis:spot:v6:${run.venue}:${run.horizon}:${packed}`;
+  return `analysis:spot:v7:${run.venue}:${run.horizon}:${packed}`;
 }
 
 async function fetchJson<T>(url: string, ms = 14000): Promise<T> {
@@ -268,7 +269,8 @@ async function readStoredAnalysis(key: string, maxAgeSec: number): Promise<Analy
     const parsed = JSON.parse(raw) as AnalysisResult;
     if (!parsed?.pick?.symbol || !parsed.killSwitch || !parsed.opportunities?.items) return null;
     const kind = parsed.verdict?.kind;
-    if (kind !== "buy" && kind !== "wait" && kind !== "stay") return null;
+    if (kind !== "buy" && kind !== "wait" && kind !== "stay" && kind !== "cash") return null;
+    if (!Array.isArray(parsed.calls) || parsed.calls.length !== 3) return null;
     parsed.cacheRows = parsed.cacheRows ?? 0;
     parsed.cacheKlines = parsed.cacheKlines ?? 0;
     return parsed;
@@ -563,10 +565,13 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     books = [];
   }
   const bookBy = new Map(books.map((book) => [book.symbol, book]));
-  scored = scored
+  const gated = scored
     .map((row) => applyBookGate(row, bookBy.get(row.symbol)))
     .sort((a, b) => b.score - a.score);
-  scored = applyLens(scored, run.horizon, run.cuts).sort((a, b) => b.score - a.score);
+  const byHorizon = new Map<Horizon, CoinRow[]>(
+    HORIZON_ORDER.map((horizon) => [horizon, applyLens(gated, horizon, run.cuts).sort((a, b) => b.score - a.score)]),
+  );
+  scored = byHorizon.get(run.horizon) ?? applyLens(gated, run.horizon, run.cuts);
   const decision = pickWinner(scored, regime, killSwitch);
   let pick = decision.pick;
   let runnerUp = decision.runnerUp;
@@ -674,29 +679,30 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
 
   const listing = await listingPromise;
   const listed = listing.ok ? new Set(listing.bases) : null;
-  let verdict = buildVerdict({
-    ranked: scored,
-    regime,
-    kill: killSwitch,
-    opportunities: opportunities.items,
-    listed,
-    horizon: run.horizon,
+  let calls: HorizonCall[] = HORIZON_ORDER.map((horizon) => {
+    const ranked = byHorizon.get(horizon) ?? scored;
+    return callFromVerdict(
+      buildVerdict({
+        ranked,
+        regime,
+        kill: killSwitch,
+        opportunities: opportunities.items,
+        listed,
+        horizon,
+      }),
+      horizon,
+      generatedAt,
+    );
   });
   if (calendar.blockSpot) {
-    const held = verdict.symbol;
-    verdict = {
-      kind: "stay",
-      symbol: null,
-      name: null,
-      priceUsd: null,
-      reachUsd: null,
-      invalidationUsd: null,
-      reason: msg(
-        `${calendar.reasonFa}${held ? ` نام برتر مدل ${held} بود و به خاطر تعطیلی صادر نشد.` : ""}`,
-        `${calendar.reasonEn}${held ? ` The model's top name was ${held} and was withheld because of the holiday.` : ""}`,
-      ),
-    };
+    const held = calls.find((call) => call.kind === "buy")?.symbol;
+    const reason = msg(
+      `هیچ ارزی نخر. ${calendar.reasonFa}${held ? ` نام برتر مدل ${held} بود و به خاطر تعطیلی صادر نشد.` : ""}`,
+      `Do not buy any coin. ${calendar.reasonEn}${held ? ` The model's top name was ${held} and was withheld because of the holiday.` : ""}`,
+    );
+    calls = HORIZON_ORDER.map((horizon) => cashCall(horizon, generatedAt, reason));
   }
+  const verdict = verdictFromCall(calls.find((call) => call.horizon === run.horizon) ?? calls[0]!);
   if (decision.refused) {
     reasons.splice(0, reasons.length, verdict.reason);
   } else if (!reasons.includes(verdict.reason)) {
@@ -742,6 +748,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     viaSeasonRule: decision.viaSeasonRule,
     refused: decision.refused || calendar.blockSpot,
     verdict,
+    calls,
     listingOk: listing.ok,
     horizon: run.horizon,
     venue: run.venue,

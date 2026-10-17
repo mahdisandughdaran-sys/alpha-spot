@@ -15,7 +15,7 @@ import { ChecklistCard } from "./checklist-card";
 import { CoinMark } from "./coin-mark";
 import { FactorBars } from "./factor-bars";
 import { FlashValue } from "./flash-value";
-import { formatPct, formatPctPoints, formatScore, formatUsd, timeAgoFa } from "./format";
+import { formatPct, formatPctPoints, formatScore, formatUntil, formatUsd, timeAgoFa } from "./format";
 import { RiskBreakdown } from "./risk-breakdown";
 
 function toneFor(n: number): "up" | "down" | "neutral" {
@@ -83,7 +83,15 @@ export function PickPanel({
           {tr(verdictSentence(verdict.kind))}
         </p>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">{tr(verdict.reason)}</p>
-        {verdict.kind === "wait" && verdict.reachUsd != null && verdict.invalidationUsd != null ? (
+        {verdict.validUntil ? (
+          <p className="mt-2 text-xs text-subtle">
+            {tr("این حکم معتبر است تا", "This call is valid until")}{" "}
+            <span className="num text-fg">{formatUntil(verdict.validUntil)}</span>
+          </p>
+        ) : null}
+        {(verdict.kind === "wait" || verdict.kind === "cash") &&
+        verdict.reachUsd != null &&
+        verdict.invalidationUsd != null ? (
           <p className="mt-2 text-xs text-subtle">
             {tr("رسیدن", "Reach")} <span className="num text-fg">${formatUsd(verdict.reachUsd)}</span>
             {" · "}

@@ -41,14 +41,15 @@ export function PrefsGate({ onSave }: { onSave: (prefs: DeskPrefs) => void }) {
           );
         })}
       </div>
-      <p className="mt-6 text-xs text-subtle">{tr("افق", "Horizon")}</p>
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <p className="mt-6 text-xs text-subtle">{tr("اعتبار حکم", "How long the call lasts")}</p>
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {(
           [
-            ["week", tr("یک هفته", "One week")],
-            ["month", tr("یک ماه", "One month")],
+            ["day", tr("یک روز", "One day"), tr("فردا می‌تواند عوض شود", "May change tomorrow")],
+            ["week", tr("یک هفته", "One week"), tr("تا هفت روز قفل است", "Locked for seven days")],
+            ["month", tr("یک ماه", "One month"), tr("تا سی روز قفل است", "Locked for thirty days")],
           ] as const
-        ).map(([id, label]) => {
+        ).map(([id, label, hint]) => {
           const on = horizon === id;
           return (
             <button
@@ -57,11 +58,12 @@ export function PrefsGate({ onSave }: { onSave: (prefs: DeskPrefs) => void }) {
               onClick={() => setHorizon(id)}
               className={
                 on
-                  ? "h-12 rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)]"
-                  : "h-12 rounded-md bg-bg px-3 text-sm text-muted shadow-[var(--shadow-border)]"
+                  ? "flex h-16 flex-col items-center justify-center rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)]"
+                  : "flex h-16 flex-col items-center justify-center rounded-md bg-bg px-3 text-sm text-muted shadow-[var(--shadow-border)]"
               }
             >
-              {label}
+              <span>{label}</span>
+              <span className="mt-0.5 text-xs text-subtle">{hint}</span>
             </button>
           );
         })}

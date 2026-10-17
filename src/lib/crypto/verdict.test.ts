@@ -75,7 +75,8 @@ test("a missing exchange list does not invent an alt buy", () => {
     listed: null,
     horizon: "week",
   });
-  assert.equal(verdict.kind, "stay");
+  assert.equal(verdict.kind, "cash");
+  assert.match(verdict.reason, /هیچ ارزی نخر/);
   assert.match(verdict.reason, /فهرست تأیید نشد/);
 });
 
@@ -88,7 +89,8 @@ test("an unlisted alt is not a buy", () => {
     listed: new Set(["BTC"]),
     horizon: "month",
   });
-  assert.equal(verdict.kind, "stay");
+  assert.equal(verdict.kind, "cash");
+  assert.match(verdict.reason, /هیچ ارزی نخر/);
   assert.match(verdict.reason, /LINK/);
   assert.doesNotMatch(verdict.reason, /فهرست تأیید نشد/);
 });
@@ -112,7 +114,7 @@ test("a listed alt in the buy zone is a buy", () => {
   assert.equal(verdict.symbol, "LINK");
 });
 
-test("bitcoin season stays in bitcoin instead of buying the thin lead", () => {
+test("bitcoin season does not buy bitcoin when it is not a spot entry", () => {
   const close = row({ symbol: "LINK", name: "Chainlink", rank: 12, score: 72 });
   const leader = row({ symbol: "BTC", name: "Bitcoin", rank: 1, score: 70 });
   const verdict = buildVerdict({
@@ -123,6 +125,8 @@ test("bitcoin season stays in bitcoin instead of buying the thin lead", () => {
     listed: new Set(["LINK", "BTC"]),
     horizon: "month",
   });
-  assert.equal(verdict.kind, "stay");
+  assert.equal(verdict.kind, "cash");
+  assert.equal(verdict.symbol, null);
+  assert.match(verdict.reason, /هیچ ارزی نخر/);
   assert.match(verdict.reason, /فصل بیت‌کوین/);
 });

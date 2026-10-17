@@ -2,7 +2,7 @@ import { clamp, percentileRank, tanhScore } from "./math.ts";
 import { FACTOR_WEIGHTS } from "./scoring.ts";
 import type { CoinRow, FactorKey } from "./types.ts";
 
-export type Horizon = "week" | "month";
+export type Horizon = "day" | "week" | "month";
 export type WeightCuts = Partial<Record<FactorKey, number>>;
 
 const FACTOR_KEYS = Object.keys(FACTOR_WEIGHTS) as FactorKey[];
@@ -24,9 +24,11 @@ export function normalizedWeights(cuts?: WeightCuts): Record<FactorKey, number> 
 
 function blendOf(row: CoinRow, horizon: Horizon): number {
   if (row.symbol === "BTC") return 0;
+  const day = capRs(row.rs24h);
   const week = capRs(row.rs7d);
   const mid = capRs(row.rs14d ?? row.rs7d);
   const month = capRs(row.rs30d ?? row.rs7d);
+  if (horizon === "day") return 0.78 * day + 0.18 * week + 0.04 * month;
   if (horizon === "week") return 0.72 * week + 0.18 * mid + 0.1 * month;
   return 0.15 * week + 0.15 * mid + 0.7 * month;
 }
@@ -34,7 +36,7 @@ function blendOf(row: CoinRow, horizon: Horizon): number {
 /**
  * Horizon changes which evidence the existing factors listen to.
  * Week: 7-day relative strength and entry. Month: 30-day strength, EMA200, weekly structure.
- * It does not add a factor and does not replace the published base weights.
+ * Day: 24-hour strength and entry. It does not add a factor and does not replace the published base weights.
  */
 export function applyLens(rows: CoinRow[], horizon: Horizon, cuts?: WeightCuts): CoinRow[] {
   const weights = normalizedWeights(cuts);
@@ -48,7 +50,12 @@ export function applyLens(rows: CoinRow[], horizon: Horizon, cuts?: WeightCuts):
       const abs = tanhScore(blend, 0.12, 50);
       let score = 0.55 * p + 0.45 * abs;
       if (row.rs7d > 0.18) score -= 10;
+      if (horizon === "day" && row.rs24h > 0.08) score -= 8;
       rs.score = clamp(score);
+    }
+    if (horizon === "day") {
+      const entry = factors.find((factor) => factor.key === "entry");
+      if (entry) entry.score = clamp(50 + (entry.score - 50) * 1.55);
     }
     if (horizon === "week") {
       const entry = factors.find((factor) => factor.key === "entry");

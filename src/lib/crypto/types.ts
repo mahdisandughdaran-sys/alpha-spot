@@ -120,7 +120,7 @@ export type CoinRow = {
   factors: FactorScore[];
 };
 
-export type VerdictKind = "buy" | "wait" | "stay";
+export type VerdictKind = "buy" | "wait" | "stay" | "cash";
 
 export type SpotVerdict = {
   kind: VerdictKind;
@@ -130,6 +130,24 @@ export type SpotVerdict = {
   reachUsd: number | null;
   invalidationUsd: number | null;
   reason: string;
+  /** Which clock this sentence belongs to. Missing only on older stored runs. */
+  horizon?: "day" | "week" | "month";
+  validUntil?: string;
+};
+
+export type HorizonCall = {
+  horizon: "day" | "week" | "month";
+  kind: "buy" | "cash";
+  symbol: string | null;
+  name: string | null;
+  priceUsd: number | null;
+  invalidationUsd: number | null;
+  reason: string;
+  issuedAt: string;
+  validUntil: string;
+  /** True when an earlier call is still inside its window, so the fresh tape was ignored. */
+  held: boolean;
+  dissent: string | null;
 };
 
 export type Regime = "btc" | "alt" | "neutral";
@@ -188,8 +206,10 @@ export type AnalysisResult = {
   /** True when pickWinner refused: kill-switch, or nobody cleared the spot gate. */
   refused: boolean;
   verdict: SpotVerdict;
+  /** Day, week, and month calls from the same tape. Each one expires on its own clock. */
+  calls: HorizonCall[];
   listingOk: boolean;
-  horizon: "week" | "month";
+  horizon: "day" | "week" | "month";
   venue: VenueId;
   top: CoinRow[];
   reasons: string[];

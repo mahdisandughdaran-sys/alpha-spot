@@ -87,6 +87,13 @@ test("a bull pullback has an entry under price and both sell levels", () => {
   assert.match(plan.buyFa, /بهترین نقطه/);
   assert.match(plan.sellUpFa, /بفروش/);
   assert.match(plan.sellDownFa, /بفروش/);
+  assert.equal(plan.windows.length, 3);
+  assert.deepEqual(
+    plan.windows.map((window) => window.horizon),
+    ["day", "week", "month"],
+  );
+  assert.ok(plan.windows[0] && plan.windows[0].validForMs < plan.windows[1]!.validForMs);
+  assert.ok(plan.windows[1] && plan.windows[1].validForMs < plan.windows[2]!.validForMs);
 });
 
 test("a deep daily breakdown is not a full-size spot buy", () => {
@@ -96,4 +103,6 @@ test("a deep daily breakdown is not a full-size spot buy", () => {
   assert.ok(plan.takeProfit > plan.price);
   assert.ok(plan.invalidation < plan.buyFrom);
   assert.ok(plan.entry > 0);
+  assert.ok(plan.windows.every((window) => window.action === "cash"));
+  assert.match(plan.orderFa, /هیچ ارزی نخر/);
 });

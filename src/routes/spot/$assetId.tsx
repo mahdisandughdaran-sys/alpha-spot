@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, LoaderCircle } from "lucide-react";
@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { CoinMark } from "@/components/desk/coin-mark";
 import { LocaleSwitch } from "@/components/desk/locale-switch";
 import { SpotLevelRuler, SpotPlanChart } from "@/components/desk/spot-plan-chart";
-import { formatPct, timeAgoFa } from "@/components/desk/format";
+import { formatPct, formatUntil, timeAgoFa } from "@/components/desk/format";
 import { loadSpotBoard, loadSpotDesk, type SpotBoard, type SpotBoardRow } from "@/lib/crypto/spot-desk";
-import { formatSpotUsd, type SpotAction, type SpotPlan } from "@/lib/crypto/spot-plan";
+import { formatSpotUsd, type SpotPlan } from "@/lib/crypto/spot-plan";
+import { lockSpotPlan } from "@/lib/crypto/spot-lock";
 import { useI18n } from "@/lib/i18n/locale";
 
 const BOARD_TTL_MS = 2 * 60 * 1000;
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/spot/$assetId")({
   }),
 });
 
-type Filter = "all" | SpotAction;
+type Filter = "all" | "buy" | "cash" | "exit";
 
 function SpotDeskPage() {
   const { assetId } = Route.useParams();
@@ -71,11 +72,19 @@ function SpotDeskPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const rows = board?.rows ?? [];
+  const rows = useMemo(
+    () => (board?.rows ?? []).map((row) => ({ ...row, plan: lockSpotPlan(row.plan) })),
+    [board],
+  );
   const active = rows.find((row) => row.assetId === activeId) ?? rows.find((row) => row.assetId === "btc") ?? rows[0] ?? null;
-  const visible = rows.filter((row) => filter === "all" || row.plan.action === filter);
-  const buys = rows.filter((row) => row.plan.action === "buy").length;
-  const waits = rows.filter((row) => row.plan.action === "wait").length;
+  const visible = rows.filter((row) => {
+    if (filter === "buy") return row.plan.windows.some((item) => item.action === "buy");
+    if (filter === "exit") return row.plan.action === "exit";
+    if (filter === "cash") return row.plan.windows.every((item) => item.action === "cash") && row.plan.action !== "exit";
+    return true;
+  });
+  const buys = rows.filter((row) => row.plan.windows.some((item) => item.action === "buy")).length;
+  const sits = rows.filter((row) => row.plan.windows.every((item) => item.action === "cash") && row.plan.action !== "exit").length;
   const exits = rows.filter((row) => row.plan.action === "exit").length;
   const missing = status === "ready" && assetId !== "btc" && !rows.some((row) => row.assetId === assetId);
 
@@ -142,8 +151,8 @@ function SpotDeskPage() {
               </h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
                 {tr(
-                  "همان سه عدد بیت‌کوین، برای ۲۰ ارز اول بازار. از کجا بخری، اگر قیمت بالا رد شد کجا بفروشی، و اگر پایین رد شد کجا خارج شوی. استیبل و رپد کنار گذاشته شده‌اند.",
-                  "The same three Bitcoin numbers, for the top 20 coins. Where to buy, where to sell if price crosses up, and where to get out if it crosses down. Stables and wrapped assets are left out.",
+                  "برای هر ارز سه حکم جدا ساخته می‌شود: یک روز، یک هفته، یک ماه. اگر آن بازه وقت خرید اسپات نباشد، جواب این است که هیچ ارزی نخری. حکم هفته و ماه تا پایان اعتبار عوض نمی‌شود.",
+                  "Each coin gets three calls: one day, one week, one month. If that window is not a spot buy, the answer is to buy no coin. The week and month calls do not change before they expire.",
                 )}
               </p>
             </div>
@@ -188,7 +197,7 @@ function SpotDeskPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <FilterChip on={filter === "all"} label={tr(`همه ${rows.length}`, `All ${rows.length}`)} onClick={() => setFilter("all")} />
                 <FilterChip on={filter === "buy"} label={tr(`بخر ${buys}`, `Buy ${buys}`)} onClick={() => setFilter("buy")} />
-                <FilterChip on={filter === "wait"} label={tr(`صبر ${waits}`, `Wait ${waits}`)} onClick={() => setFilter("wait")} />
+                <FilterChip on={filter === "cash"} label={tr(`نخر ${sits}`, `Buy none ${sits}`)} onClick={() => setFilter("cash")} />
                 <FilterChip on={filter === "exit"} label={tr(`بفروش ${exits}`, `Sell ${exits}`)} onClick={() => setFilter("exit")} />
               </div>
               <p className="text-xs text-subtle">
@@ -324,7 +333,7 @@ function BoardTable({
                     <span className="text-muted">{tr(row.plan.nameFa, row.plan.nameEn)}</span>
                   </span>
                 </td>
-                <td className={`px-3 py-2 ${actionTone(row.plan.action)}`}>{actionLabel(row.plan.action, tr)}</td>
+                <td className={`px-3 py-2 ${callTone(row.plan)}`}>{callText(row.plan, tr)}</td>
                 <td className="num px-3 py-2 text-fg">{formatSpotUsd(row.plan.price)}</td>
                 <td className="num px-3 py-2 text-up">{formatSpotUsd(row.plan.entry)}</td>
                 <td className="num px-3 py-2 text-warn">{formatSpotUsd(row.plan.takeProfit)}</td>
@@ -338,15 +347,25 @@ function BoardTable({
   );
 }
 
-function actionLabel(action: SpotAction, tr: (fa: string, en?: string) => string): string {
-  if (action === "buy") return tr("بخر", "Buy");
-  if (action === "exit") return tr("بفروش", "Sell");
-  return tr("صبر کن", "Wait");
+function windowUntil(fetchedAt: string | null, validForMs: number): string {
+  const base = fetchedAt ? Date.parse(fetchedAt) : Date.now();
+  const start = Number.isFinite(base) ? base : Date.now();
+  return new Date(start + validForMs).toISOString();
 }
 
-function actionTone(action: SpotAction): string {
-  if (action === "buy") return "text-up";
-  if (action === "exit") return "text-down";
+function callText(plan: SpotPlan, tr: (fa: string, en?: string) => string): string {
+  if (plan.action === "exit" && plan.windows.every((item) => item.action === "cash")) {
+    return tr("بفروش و نخر", "Sell, do not buy");
+  }
+  const open = plan.windows.filter((item) => item.action === "buy");
+  if (!open.length) return tr("هیچ ارزی نخر", "Do not buy any coin");
+  const longest = open[open.length - 1]!;
+  return tr(`بخر · ${longest.titleFa}`, `Buy · ${longest.titleEn}`);
+}
+
+function callTone(plan: SpotPlan): string {
+  if (plan.windows.some((item) => item.action === "buy")) return "text-up";
+  if (plan.action === "exit") return "text-down";
   return "text-warn";
 }
 
@@ -362,8 +381,8 @@ function PlanBody({
   onReload: () => void;
 }) {
   const { tr } = useI18n();
-  const action = actionLabel(plan.action, tr);
-  const actionClass = actionTone(plan.action);
+  const sitting = plan.windows.every((item) => item.action === "cash");
+  const actionClass = sitting ? "text-warn" : "text-up";
   const size =
     plan.size === "full"
       ? tr("اندازه کامل", "Full size")
@@ -382,8 +401,26 @@ function PlanBody({
       <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className={`text-3xl font-medium tracking-tight ${actionClass}`}>{action}</p>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">{tr(plan.headlineFa, plan.headlineEn)}</p>
+            <p className={`text-3xl font-medium tracking-tight ${actionClass}`}>{tr(plan.orderFa, plan.orderEn)}</p>
+            {plan.headlineFa !== plan.orderFa ? (
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">{tr(plan.headlineFa, plan.headlineEn)}</p>
+            ) : null}
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
+              {plan.windows.map((item) => (
+                <div key={item.horizon} className="rounded-lg bg-bg px-3 py-3">
+                  <p className="text-xs text-subtle">{tr(item.titleFa, item.titleEn)}</p>
+                  <p className={`mt-1 text-sm font-medium ${item.action === "buy" ? "text-up" : "text-warn"}`}>
+                    {item.action === "buy" ? tr("بخر", "Buy") : tr("هیچ ارزی نخر", "Do not buy any coin")}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted">{tr(item.noteFa, item.noteEn)}</p>
+                  <p className="mt-2 text-xs text-subtle">
+                    {tr("معتبر تا", "Valid until")}{" "}
+                    <span className="num text-fg">{formatUntil(windowUntil(fetchedAt, item.validForMs))}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+            {plan.holdFa ? <p className="mt-3 text-xs leading-relaxed text-warn">{tr(plan.holdFa, plan.holdEn ?? undefined)}</p> : null}
           </div>
           <div className="text-end">
             <p className="num text-2xl text-fg">{formatSpotUsd(plan.price)}</p>
@@ -408,7 +445,11 @@ function PlanBody({
 
       <section className="grid gap-3 md:grid-cols-3">
         <LevelCard
-          k={tr("از این قیمت بخر", "Buy from this price")}
+          k={
+            sitting
+              ? tr("ناحیه تماشا، نه دستور خرید", "Watch zone, not a buy order")
+              : tr("از این قیمت بخر", "Buy from this price")
+          }
           value={formatSpotUsd(plan.entry)}
           detail={tr(plan.buyFa, plan.buyEn)}
           tone="text-up"
