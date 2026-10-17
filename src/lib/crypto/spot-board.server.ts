@@ -8,9 +8,9 @@ import {
   type RankSeed,
 } from "./spot-assets.ts";
 
-const PAPRIKA = "https://api.coinpaprika.com/v1/tickers?quotes=USD&limit=150";
+const PAPRIKA = "https://api.coinpaprika.com/v1/tickers?quotes=USD&limit=250";
 const GECKO =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false";
+  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false";
 const PRICES = "https://data-api.binance.vision/api/v3/ticker/price";
 const BOARD_TTL_MS = 2 * 60 * 1000;
 
@@ -44,9 +44,9 @@ export async function loadTopSpotBoard(force = false): Promise<SpotBoard> {
 
   const [ranked, bases] = await Promise.all([fetchRanked(), fetchUsdtBases()]);
   const source = ranked.rows.length > 0 ? "live" : "fallback";
-  const candidates = pickTopSpot(ranked.rows, bases, TOP_SPOT + 8);
+  const candidates = pickTopSpot(ranked.rows, bases, TOP_SPOT + 20);
   rememberSpotNames(candidates);
-  const plans = await firstPlans(candidates, TOP_SPOT, 4);
+  const plans = await firstPlans(candidates, TOP_SPOT, 8);
   const rows: SpotBoardRow[] = [];
   for (let i = 0; i < candidates.length && rows.length < TOP_SPOT; i++) {
     const plan = plans[i];
@@ -59,7 +59,7 @@ export async function loadTopSpotBoard(force = false): Promise<SpotBoard> {
       plan,
     });
   }
-  if (rows.length < 8) throw new Error("تحلیل بیست ارز اول کامل نشد. کمی بعد دوباره بزن.");
+  if (rows.length < 20) throw new Error("تحلیل پنجاه ارز اول کامل نشد. کمی بعد دوباره بزن.");
 
   const value: SpotBoard = {
     fetchedAt: new Date().toISOString(),

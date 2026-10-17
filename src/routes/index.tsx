@@ -416,13 +416,13 @@ function Home() {
       };
     }
     const verdict = data.verdict;
-    const symbol = verdict.symbol;
-    const row = data.top.find((item) => item.symbol === symbol) ?? data.pick;
+    const row = data.top.find((item) => item.symbol === verdict.symbol) ?? data.pick;
+    const symbol = verdict.symbol ?? row.symbol;
     const stored: StoredSuggestion = {
       id: `${data.generatedAt}:${verdict.kind}:${symbol}`,
       at: data.generatedAt,
       symbol,
-      name: verdict.name ?? row.name,
+      name: verdict.name ?? row.name ?? symbol,
       priceUsd: verdict.priceUsd ?? row.priceUsd,
       btcPriceUsd: data.btcPriceUsd,
       kind: "buy",
@@ -564,7 +564,7 @@ function Home() {
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
               <Button size="lg" variant="outline" asChild className="h-12 min-w-44">
                 <Link to="/spot/$assetId" params={{ assetId: "btc" }}>
-                  {tr("میز بیت‌کوین · ۲۰ ارز", "Bitcoin desk · top 20")}
+                  {tr("میز بیت‌کوین · ۵۰ ارز", "Bitcoin desk · top 50")}
                 </Link>
               </Button>
               <Button

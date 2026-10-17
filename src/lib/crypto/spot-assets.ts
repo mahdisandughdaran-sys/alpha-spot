@@ -1,5 +1,5 @@
 /**
- * The Bitcoin desk analyses the top twenty spot coins with one engine.
+ * The Bitcoin desk analyses the top fifty spot coins with one engine.
  * SPOT_ASSETS is the offline fallback when the live market-cap list is down.
  * A live pass can replace this order; every row stays on a Binance USDT pair.
  */
@@ -24,7 +24,7 @@ export type PickedSpot = SpotAsset & {
   marketRank: number | null;
 };
 
-export const TOP_SPOT = 20;
+export const TOP_SPOT = 50;
 
 const NAME_FA: Record<string, string> = {
   BTC: "بیت‌کوین",
@@ -82,6 +82,33 @@ const NAME_FA: Record<string, string> = {
   RUNE: "تورچین",
   VET: "وی‌چین",
   ALGO: "الگورند",
+  KAS: "کاسپا",
+  CRO: "کرونوس",
+  OKB: "اوکی‌بی",
+  MNT: "منتل",
+  LEO: "لئو",
+  DASH: "دش",
+  MKR: "میکر",
+  SKY: "اسکای",
+  PENDLE: "پندل",
+  JTO: "جیتو",
+  PYTH: "پایت",
+  PENGU: "پنگو",
+  FLOKI: "فلوکی",
+  AR: "آرویو",
+  CRV: "کرو",
+  ENS: "اتریوم نیم‌سرویس",
+  STRK: "استارک‌نت",
+  CAKE: "پنکیک‌سواپ",
+  DYDX: "دی‌وای‌دی‌ایکس",
+  VIRTUAL: "ویرچوال",
+  AERO: "آئرودروم",
+  KAIA: "کایا",
+  BGB: "بیت‌گت",
+  PI: "پای نتورک",
+  MORPHO: "مورفو",
+  XDC: "اکس‌دی‌سی",
+  ASTER: "آستر",
 };
 
 const extraNames = new Map<string, { nameFa: string; nameEn: string }>();
@@ -107,7 +134,7 @@ function row(symbol: string, nameEn: string): SpotAsset {
   };
 }
 
-/** Liquid Binance USDT names used when the live cap list does not arrive. Order matches a recent non-stable top twenty. */
+/** Liquid Binance USDT names used when the live cap list does not arrive. Order starts with a recent non-stable top twenty, then the next liquid names. */
 export const SPOT_ASSETS: SpotAsset[] = [
   row("BTC", "Bitcoin"),
   row("ETH", "Ethereum"),
@@ -129,6 +156,36 @@ export const SPOT_ASSETS: SpotAsset[] = [
   row("SUI", "Sui"),
   row("TON", "Toncoin"),
   row("DOT", "Polkadot"),
+  row("UNI", "Uniswap"),
+  row("AAVE", "Aave"),
+  row("TAO", "Bittensor"),
+  row("SHIB", "Shiba Inu"),
+  row("PEPE", "Pepe"),
+  row("APT", "Aptos"),
+  row("ATOM", "Cosmos"),
+  row("FIL", "Filecoin"),
+  row("ICP", "Internet Computer"),
+  row("OP", "Optimism"),
+  row("ARB", "Arbitrum"),
+  row("INJ", "Injective"),
+  row("TIA", "Celestia"),
+  row("SEI", "Sei"),
+  row("RENDER", "Render"),
+  row("FET", "Artificial Superintelligence"),
+  row("ONDO", "Ondo"),
+  row("WLD", "Worldcoin"),
+  row("ENA", "Ethena"),
+  row("S", "Sonic"),
+  row("POL", "Polygon"),
+  row("ETC", "Ethereum Classic"),
+  row("HBAR", "Hedera"),
+  row("STX", "Stacks"),
+  row("IMX", "Immutable"),
+  row("GRT", "The Graph"),
+  row("JUP", "Jupiter"),
+  row("BONK", "Bonk"),
+  row("WIF", "dogwifhat"),
+  row("LDO", "Lido"),
 ];
 
 export function getSpotAsset(id: string): SpotAsset | null {

@@ -8,11 +8,17 @@ import { LocaleSwitch } from "@/components/desk/locale-switch";
 import { SpotLevelRuler, SpotPlanChart } from "@/components/desk/spot-plan-chart";
 import { formatPct, formatUntil, timeAgoFa } from "@/components/desk/format";
 import { loadSpotBoard, loadSpotDesk, type SpotBoard, type SpotBoardRow } from "@/lib/crypto/spot-desk";
+import { TOP_SPOT } from "@/lib/crypto/spot-assets";
 import { formatSpotUsd, type SpotPlan } from "@/lib/crypto/spot-plan";
 import { lockSpotPlan } from "@/lib/crypto/spot-lock";
 import { useI18n } from "@/lib/i18n/locale";
 
 const BOARD_TTL_MS = 2 * 60 * 1000;
+const TOP_FA = faDigits(TOP_SPOT);
+
+function faDigits(n: number): string {
+  return String(n).replace(/[0-9]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)] ?? digit);
+}
 
 let clientBoard: SpotBoard | null = null;
 let clientAt = 0;
@@ -20,7 +26,7 @@ let clientAt = 0;
 export const Route = createFileRoute("/spot/$assetId")({
   component: SpotDeskPage,
   head: () => ({
-    meta: [{ title: "میز بیت‌کوین · ۲۰ ارز اول · آلفا اسپات" }],
+    meta: [{ title: `میز بیت‌کوین · ${TOP_FA} ارز اول · آلفا اسپات` }],
   }),
 });
 
@@ -36,6 +42,7 @@ function SpotDeskPage() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState(assetId);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -63,7 +70,7 @@ function SpotDeskPage() {
       .catch((err: unknown) => {
         if (stop) return;
         setStatus("error");
-        setError(err instanceof Error ? err.message : "تحلیل ۲۰ ارز انجام نشد.");
+        setError(err instanceof Error ? err.message : `تحلیل ${TOP_FA} ارز انجام نشد.`);
       });
     return () => {
       stop = true;
@@ -77,11 +84,18 @@ function SpotDeskPage() {
     [board],
   );
   const active = rows.find((row) => row.assetId === activeId) ?? rows.find((row) => row.assetId === "btc") ?? rows[0] ?? null;
+  const needle = query.trim().toLowerCase();
   const visible = rows.filter((row) => {
-    if (filter === "buy") return row.plan.windows.some((item) => item.action === "buy");
-    if (filter === "exit") return row.plan.action === "exit";
-    if (filter === "cash") return row.plan.windows.every((item) => item.action === "cash") && row.plan.action !== "exit";
-    return true;
+    if (filter === "buy" && !row.plan.windows.some((item) => item.action === "buy")) return false;
+    if (filter === "exit" && row.plan.action !== "exit") return false;
+    if (filter === "cash" && !(row.plan.windows.every((item) => item.action === "cash") && row.plan.action !== "exit")) return false;
+    if (!needle) return true;
+    return (
+      row.plan.symbol.toLowerCase().includes(needle) ||
+      row.plan.nameEn.toLowerCase().includes(needle) ||
+      row.plan.nameFa.toLowerCase().includes(needle) ||
+      row.assetId.includes(needle)
+    );
   });
   const buys = rows.filter((row) => row.plan.windows.some((item) => item.action === "buy")).length;
   const sits = rows.filter((row) => row.plan.windows.every((item) => item.action === "cash") && row.plan.action !== "exit").length;
@@ -105,7 +119,7 @@ function SpotDeskPage() {
       })
       .catch((err: unknown) => {
         setStatus("error");
-        setError(err instanceof Error ? err.message : "تحلیل ۲۰ ارز انجام نشد.");
+        setError(err instanceof Error ? err.message : `تحلیل ${TOP_FA} ارز انجام نشد.`);
       })
       .finally(() => setRefreshing(false));
   };
@@ -151,8 +165,8 @@ function SpotDeskPage() {
               </h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
                 {tr(
-                  "برای هر ارز سه حکم جدا ساخته می‌شود: یک روز، یک هفته، یک ماه. اگر آن بازه وقت خرید اسپات نباشد، جواب این است که هیچ ارزی نخری. حکم هفته و ماه تا پایان اعتبار عوض نمی‌شود.",
-                  "Each coin gets three calls: one day, one week, one month. If that window is not a spot buy, the answer is to buy no coin. The week and month calls do not change before they expire.",
+                  `پنجاه ارز اولِ غیر استیبل و غیر رپد، هر کدام با سه حکم جدا: یک روز، یک هفته، یک ماه. اگر آن بازه وقت خرید اسپات نباشد، جواب این است که هیچ ارزی نخری. حکم هفته و ماه تا پایان اعتبار عوض نمی‌شود. بیت‌کوین همیشه اول فهرست است.`,
+                  `The top ${TOP_SPOT} coins, with stables and wrapped assets left out. Each one gets three calls: one day, one week, one month. If that window is not a spot buy, the answer is to buy no coin. The week and month calls do not change before they expire. Bitcoin stays first.`,
                 )}
               </p>
             </div>
@@ -167,7 +181,7 @@ function SpotDeskPage() {
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
             <p className="flex items-center gap-2 text-sm text-fg">
               <LoaderCircle className="size-4 animate-spin" />
-              {tr("کندل روزانهٔ ۲۰ ارز اول", "Daily candles for the top 20")}
+              {tr(`کندل روزانهٔ ${TOP_FA} ارز اول`, `Daily candles for the top ${TOP_SPOT}`)}
             </p>
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-elevated">
               <div className="shimmer h-full w-2/3 rounded-full bg-accent/40" />
@@ -183,7 +197,7 @@ function SpotDeskPage() {
 
         {status === "error" ? (
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
-            <p className="text-sm text-down">{tr("تحلیل ۲۰ ارز کامل نشد", "The top-20 plan did not finish")}</p>
+            <p className="text-sm text-down">{tr(`تحلیل ${TOP_FA} ارز کامل نشد`, `The top-${TOP_SPOT} plan did not finish`)}</p>
             <p className="mt-2 text-sm text-muted">{error ? tr(error) : null}</p>
             <Button className="mt-4" onClick={refreshBoard}>
               {tr("تلاش دوباره", "Try again")}
@@ -195,10 +209,19 @@ function SpotDeskPage() {
           <>
             <section className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <FilterChip on={filter === "all"} label={tr(`همه ${rows.length}`, `All ${rows.length}`)} onClick={() => setFilter("all")} />
-                <FilterChip on={filter === "buy"} label={tr(`بخر ${buys}`, `Buy ${buys}`)} onClick={() => setFilter("buy")} />
-                <FilterChip on={filter === "cash"} label={tr(`نخر ${sits}`, `Buy none ${sits}`)} onClick={() => setFilter("cash")} />
-                <FilterChip on={filter === "exit"} label={tr(`بفروش ${exits}`, `Sell ${exits}`)} onClick={() => setFilter("exit")} />
+                <FilterChip on={filter === "all"} label={tr(`همه ${faDigits(rows.length)}`, `All ${rows.length}`)} onClick={() => setFilter("all")} />
+                <FilterChip on={filter === "buy"} label={tr(`بخر ${faDigits(buys)}`, `Buy ${buys}`)} onClick={() => setFilter("buy")} />
+                <FilterChip on={filter === "cash"} label={tr(`نخر ${faDigits(sits)}`, `Buy none ${sits}`)} onClick={() => setFilter("cash")} />
+                <FilterChip on={filter === "exit"} label={tr(`بفروش ${faDigits(exits)}`, `Sell ${exits}`)} onClick={() => setFilter("exit")} />
+                <label className="flex h-11 min-w-40 flex-1 items-center rounded-lg bg-surface px-3 text-sm shadow-[var(--shadow-border)] sm:max-w-56">
+                  <span className="sr-only">{tr("جستجوی ارز", "Search coins")}</span>
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={tr("نماد یا نام", "Symbol or name")}
+                    className="w-full bg-transparent text-fg outline-none placeholder:text-subtle"
+                  />
+                </label>
               </div>
               <p className="text-xs text-subtle">
                 {board.source === "live"
@@ -210,9 +233,9 @@ function SpotDeskPage() {
                       `فهرست ذخیره، چون رتبه زنده نرسید · ${timeAgoFa(board.fetchedAt)}`,
                       `Saved list, because the live rank did not arrive · ${timeAgoFa(board.fetchedAt)}`,
                     )}
-                {rows.length < 20
+                {rows.length < TOP_SPOT
                   ? tr(
-                      ` · ${rows.length} ارز کندل کامل داشتند`,
+                      ` · ${faDigits(rows.length)} ارز کندل کامل داشتند`,
                       ` · ${rows.length} coins had a complete candle history`,
                     )
                   : null}
@@ -220,8 +243,8 @@ function SpotDeskPage() {
               {missing ? (
                 <p className="text-sm text-muted">
                   {tr(
-                    "این نماد الان بین ۲۰ تای اول نیست. تحلیل بیت‌کوین نشان داده می‌شود.",
-                    "That ticker is not in the current top 20. Bitcoin is on screen instead.",
+                    `این نماد الان بین ${TOP_FA} تای اول نیست. تحلیل بیت‌کوین نشان داده می‌شود.`,
+                    `That ticker is not in the current top ${TOP_SPOT}. Bitcoin is on screen instead.`,
                   )}
                 </p>
               ) : null}
@@ -297,9 +320,9 @@ function BoardTable({
     );
   }
   return (
-    <div className="max-w-full overflow-x-auto rounded-xl bg-surface shadow-[var(--shadow-border)]">
+    <div className="max-h-[70vh] max-w-full overflow-auto rounded-xl bg-surface shadow-[var(--shadow-border)]">
       <table className="w-full min-w-[720px] text-start text-sm">
-        <thead className="text-xs text-subtle">
+        <thead className="sticky top-0 z-10 bg-surface text-xs text-subtle">
           <tr className="border-b border-border">
             <th className="px-3 py-3 font-normal">{tr("رتبه", "Rank")}</th>
             <th className="px-3 py-3 font-normal">{tr("ارز", "Coin")}</th>
