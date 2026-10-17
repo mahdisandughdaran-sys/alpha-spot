@@ -1,106 +1,62 @@
-# آلفا اسپات (Alpha Spot)
+<div align="center">
 
-Persian, right-to-left spot desk. One button ranks the top 100 crypto assets **against Bitcoin**, then names a single spot buy — or Bitcoin itself when alts are weak.
+# Alpha-Spot
 
-This is a TanStack Start + React 19 app. Auth and the database are **off**. Live quotes come from CoinPaprika and Binance public APIs. Nothing is stored on the server.
+**Live crypto spot desk. Rank alts against Bitcoin, size the position, or stay in BTC.**
 
-## What you need
+[Live demo](https://alpha-spot-pk54.netlify.app/) · [Source](https://github.com/mahdisandughdaran-sys/alpha-spot)
 
-- Node.js 20 or newer (`node -v`)
-- npm 10 or newer
-- Outbound HTTPS to `api.coinpaprika.com` and `data-api.binance.vision`
+Persian + English · RTL · Public market data only
 
-On Termux:
+</div>
 
-```sh
-pkg install nodejs
-```
+> Not investment advice. Quotes come from CoinPaprika and Binance. Nothing is stored on the server.
 
-## Unpack
+Alpha-Spot is a right-to-left spot desk for people who measure altcoins **in Bitcoin**, not in headlines. One action ranks the liquid universe on the BTC pair and names a single spot idea — or Bitcoin itself when alts are weak.
 
-If you still have the archive:
+## Features
 
-```sh
-mkdir -p ~/alpha-spot
-unzip -o /storage/emulated/0/Download/grok-workspace-3.zip -d ~/alpha-spot
-cd ~/alpha-spot
-```
+- **Pick vs Bitcoin.** Score liquid coins on the BTC pair. One name comes back, with the reasons and a 30-day BTC chart. If the field is weak, Bitcoin wins.
+- **Opportunity zones.** Names that are not a buy yet: the zone, what would confirm it, and what would invalidate it. Touching the price is not confirmation.
+- **Position size.** `(capital × risk%) / stop%`, next to taker-buy flow and an estimated liquidation map.
+- **Bitcoin desk.** Top non-stable names. One buy, one sell-if-up, one sell-if-down. Stables stay out. Bitcoin stays first.
+- **Macro clock.** Tehran and New York sessions, holidays, FOMC / GDP / PCE.
+- **Backtest, with costs.** 10 bps fee and 8 bps slippage per side.
 
-The copy already prepared on this machine is `~/alpha-spot`.
+## Stack
 
-## Install and run
+React 19, TypeScript, Tailwind CSS, TanStack Start, Vite. Data: CoinPaprika and Binance. Deployed on Netlify.
 
-Skip the Playwright browser download. The desk does not use it, and Chromium is not available in Termux.
+## Screenshots
 
-```sh
-cd ~/alpha-spot
-export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+![Spot pick](screenshots/final-pick.png)
+![Factor cards](screenshots/chart.png)
+![Bitcoin desk](screenshots/desk-50.png)
+![Home](screenshots/app-builder-built.png)
+
+## Run it locally
+
+Node.js 20+ and npm 10+.
+
+​```bash
+git clone https://github.com/mahdisandughdaran-sys/alpha-spot.git
+cd alpha-spot
 npm install
 npm run dev
-```
+​```
 
-`npm start` is the same command.
+Dev server: http://127.0.0.1:8080
 
-The dev server listens on **all interfaces**, port **8080**:
+## فارسی
 
-- this device: <http://127.0.0.1:8080>
-- another device on the same Wi-Fi: `http://<phone-ip>:8080`
+آلفا اسپات میز اسپات راست‌به‌چپ است. هر دارایی روی جفت بیت‌کوین سنجیده می‌شود. اگر آلت‌ها ضعیف باشند، خود بیت‌کوین برنده است.
 
-Find the phone address with:
+1. انتخاب — یک نام، دلیل‌ها، نمودار ۳۰روزه جفت BTC
+2. فرصت‌ها — ناحیه، تأیید، ابطال
+3. اندازه پوزیشن — (سرمایه × درصد ریسک) / درصد حد ضرر
+4. میز بیت‌کوین — خرید، فروش بالایی، فروش پایینی
+5. تقویم کلان — تهران، نیویورک، FOMC
 
-```sh
-ip -4 addr show wlan0 | awk '/inet / {print $2}'
-```
+این صفحه توصیه سرمایه‌گذاری نیست.
 
-Leave the terminal open. Stop the server with Ctrl+C.
-
-### Background start
-
-```sh
-cd ~/alpha-spot
-sh startup.sh
-tail -f .dev-server.log
-```
-
-`startup.sh` exits immediately if port 8080 is already answering.
-
-## Use the desk
-
-1. Open the URL above. The idle screen explains the three rules: BTC pair, do not buy the high, Bitcoin can win.
-2. Tap **تحلیل ۱۰۰ ارز برتر**.
-3. Wait a few seconds. The server pulls the top ranks, builds each coin’s BTC-pair series, and scores five factors.
-4. Read **انتخاب** (the pick, reasons, 30-day BTC-pair chart, factor bars).
-5. Open **فرصت‌ها** for names that are not a buy yet. Each one shows a zone, why that zone was chosen, what would confirm it, and what would invalidate it. Touching the price is not confirmation.
-6. Open **رتبه‌ها** for the top 12 scores, or **روش** for the weights.
-7. Tap **تحلیل دوباره** to refresh. Full results are cached for two minutes. A lighter price check, about every three minutes, only warns when a saved zone is near, touched, or preliminarily broken.
-8. In **فرصت‌ها**, run **بک‌تست فرصت**. It keeps a fee of 10 bps and slippage of 8 bps per side, and it will say when there are not enough confirmed trades. Past results are not future results.
-9. From the idle screen, **همگرایی حجم** reads one coin without waiting for the full universe: taker-buy flow, an estimated liquidation map (unswept 5x–100x pools), and `position = (capital × risk%) / stop%`.
-
-10. Open **میز بیت‌کوین** for the same spot page, now across the top 50 non-stable coins. Bitcoin stays first. Each name gets one buy, one price that means sell if crossed upward, and one price that means sell if crossed downward. Stables and wrapped assets are left out. The list follows live market cap when CoinPaprika or CoinGecko answers, and a saved fifty when they do not. No new route.
-
-This is not investment advice.
-
-## Other scripts
-
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Dev server on `0.0.0.0:8080` |
-| `npm run build` | Production build. Skips Postgres when `DATABASE_URL` is unset |
-| `npm run preview` | Serve the build on `127.0.0.1:8081` |
-| `npm run typecheck` | TypeScript, no emit |
-| `npm test` | Script and auth-gate unit tests |
-| `npm run lint` | ESLint |
-
-`DATABASE_URL` is optional. Leave it unset for local use.
-
-## Layout
-
-```text
-src/routes/index.tsx          desk UI (idle, loading, pick / ranks / method)
-src/components/desk/          pick card, chart, factor bars, leaderboard, opportunity desk
-src/lib/crypto/               fetch, scoring, opportunity zones, exclusions, Persian explanations
-public/fonts/                 Vazirmatn + IBM Plex Mono (no Google Fonts)
-startup.sh                    portable restart helper
-```
-
-Auth, Better Auth, and PGLite stay in `src/lib` for the original scaffold. This app does not import them on the request path.
+Made by [Mahdi Sandughdaran](https://github.com/mahdisandughdaran-sys).
