@@ -22,6 +22,7 @@ import { FlashValue } from "@/components/desk/flash-value";
 import { QuickFilters } from "@/components/desk/quick-filters";
 import { UnlocksPanel } from "@/components/desk/unlocks-panel";
 import { BacktestPanel } from "@/components/desk/backtest-panel";
+import { DeskCompare } from "@/components/desk/desk-compare";
 import { DepthPanel } from "@/components/desk/depth-panel";
 import { ExecutePanel } from "@/components/desk/execute-panel";
 import { VenuePanel } from "@/components/desk/venue-panel";
@@ -617,6 +618,8 @@ function Home() {
 
         {ready && !prefs && status !== "loading" && !flowOnly ? <PrefsGate onSave={commitPrefs} /> : null}
 
+        {status !== "done" && status !== "loading" && !flowOnly ? <DeskCompare /> : null}
+
         {status === "loading" ? (
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
             <p className="text-sm text-fg">{stages[stage]}</p>
@@ -663,6 +666,14 @@ function Home() {
                 setTab("table");
               }}
             />
+            <details className="rounded-xl bg-surface shadow-[var(--shadow-border)]">
+              <summary className="cursor-pointer px-5 py-4 text-sm text-fg">
+                {tr("فرق میز بیت‌کوین با بقیه بخش‌ها", "How the Bitcoin desk differs from the rest")}
+              </summary>
+              <div className="px-2 pb-2">
+                <DeskCompare here="home" />
+              </div>
+            </details>
             <SymbolTape
               rows={result.top}
               picked={result.verdict.kind === "buy" ? (result.verdict.symbol ?? "") : ""}

@@ -29,4 +29,13 @@ test("walk-forward backtest returns a finite path against bitcoin", () => {
   assert.ok(report.winRate >= 0 && report.winRate <= 1);
   assert.ok(report.curve.length > 5);
   assert.ok(report.maxDrawdown <= 0);
+  assert.ok(report.months.length >= 4);
+  assert.equal(Number.isFinite(report.avgMonthly), true);
+  assert.equal(Number.isFinite(report.compoundMonthly), true);
+  assert.ok(report.bestMonth >= report.avgMonthly);
+  assert.ok(report.avgMonthly >= report.worstMonth);
+  assert.ok(report.positiveMonths >= 0 && report.positiveMonths <= report.monthCount);
+  assert.ok(report.monthsAhead >= 0 && report.monthsAhead <= report.monthCount);
+  const compounded = report.months.reduce((product, row) => product * (1 + row.model), 1);
+  assert.ok(Math.abs(compounded - (1 + report.totalReturn)) < 1e-8);
 });

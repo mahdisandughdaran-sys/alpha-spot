@@ -7,8 +7,8 @@
       "status": 200,
       "title": "آلفا اسپات",
       "hasCanvas": false,
-      "bodyTextLen": 692,
-      "bodyTextHash": "f6b430072c8fb8b22250a1c13b1a126f002a74cc8d0c30ffcdcd19970e1138af",
+      "bodyTextLen": 2763,
+      "bodyTextHash": "4fe764980a62a770e3447b8f74fbdce927461d2eec77a2267b298a4f7837ae6a",
       "bodyTextPrefix": "ALPHA SPOT فا EN به من ستاره دهید داده زنده بازار - در حال همگام",
       "horizontalOverflow": false,
       "consoleErrors": [],
@@ -21,8 +21,8 @@
       "status": 200,
       "title": "آلفا اسپات",
       "hasCanvas": false,
-      "bodyTextLen": 692,
-      "bodyTextHash": "f6b430072c8fb8b22250a1c13b1a126f002a74cc8d0c30ffcdcd19970e1138af",
+      "bodyTextLen": 2763,
+      "bodyTextHash": "4fe764980a62a770e3447b8f74fbdce927461d2eec77a2267b298a4f7837ae6a",
       "bodyTextPrefix": "ALPHA SPOT فا EN به من ستاره دهید داده زنده بازار - در حال همگام",
       "horizontalOverflow": false,
       "consoleErrors": [],
@@ -33,6 +33,8 @@
   "brandWarnings": [],
   "authWarnings": [],
   "verdictFile": "/workspace/screenshots/app-builder-built.json",
-  "divergesFromBaseline": false,
-  "baselineReasons": []
+  "divergesFromBaseline": true,
+  "baselineReasons": [
+    "mobile: body text changed (3326 -> 2763 chars, hash mismatch)"
+  ]
 }

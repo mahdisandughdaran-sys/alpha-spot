@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CoinMark } from "@/components/desk/coin-mark";
+import { DeskCompare } from "@/components/desk/desk-compare";
 import { LocaleSwitch } from "@/components/desk/locale-switch";
 import { SpotLevelRuler, SpotPlanChart } from "@/components/desk/spot-plan-chart";
 import { formatPct, formatUntil, timeAgoFa } from "@/components/desk/format";
@@ -176,6 +177,8 @@ function SpotDeskPage() {
             </Button>
           </div>
         </header>
+
+        <DeskCompare here="btc" />
 
         {status === "loading" ? (
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">

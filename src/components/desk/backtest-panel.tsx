@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  Bar,
+  BarChart,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -42,14 +44,14 @@ export function BacktestPanel() {
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h3 className="text-base font-medium text-fg">{tr("بک‌تست سه ساله", "Three-year backtest")}</h3>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
             {tr(
-              "اگر هر هفته با همین مدل اسپات بین بیت‌کوین و آلت‌های نقدشونده جابه‌جا می‌شدید، بازده و وین‌ریت مسیر تاریخی چه بود. این آینده را تضمین نمی‌کند.",
-              "If you had rotated each week, with this same spot model, between Bitcoin and liquid alts, this is what the historical return and win rate would have been. It does not guarantee the future.",
+              "اگر هر هفته با همین مدل اسپات بین بیت‌کوین و آلت‌های نقدشونده جابه‌جا می‌شدید، بازده کل و بازده هر ماه چه بود. ماه ناقص (کمتر از سه هفته) در میانگین نمی‌آید، به شرطی که سه ماه کامل وجود داشته باشد. این آینده را تضمین نمی‌کند و حکم‌های قفل‌شده میز بیت‌کوین را نمی‌سنجد.",
+              "If you had rotated each week, with this same spot model, between Bitcoin and liquid alts, this is the total return and the return of each month. A partial month (fewer than three weeks) is left out of the average once three complete months exist. It does not guarantee the future, and it does not score the Bitcoin desk’s locked calls.",
             )}
           </p>
         </div>
@@ -111,6 +113,7 @@ export function BacktestPanel() {
               </ResponsiveContainer>
             </div>
           ) : null}
+          <MonthlyReturns report={report} />
           <ul className="flex flex-wrap gap-2">
             {report.holdings.slice(0, 6).map((row) => (
               <li key={row.symbol} className="rounded-full bg-elevated px-3 py-1 text-xs text-muted">
@@ -141,6 +144,132 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-md bg-surface px-3 py-3 shadow-[var(--shadow-border)]">
       <p className="text-xs text-subtle">{tr(label)}</p>
       <p className="num mt-1 text-sm text-fg">{value}</p>
+    </div>
+  );
+}
+
+function monthLabel(key: string, locale: "fa" | "en"): string {
+  const [year, month] = key.split("-");
+  const y = Number(year);
+  const m = Number(month);
+  if (!y || !m) return key;
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(locale === "en" ? "en-GB" : "fa-IR", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function MonthlyReturns({ report }: { report: BacktestReport }) {
+  const { tr, locale } = useI18n();
+  const pct = locale === "en" ? "%" : "٪";
+  if (report.months.length === 0) return null;
+  const rows = report.months.map((row) => ({
+    ...row,
+    label: monthLabel(row.key, locale),
+    gap: row.model - row.btc,
+  }));
+  const sample =
+    report.monthSample === "full"
+      ? tr(
+          `میانگین روی ${report.monthCount} ماه کامل است. ماه ناقص در جدول می‌ماند ولی داخل میانگین نیست.`,
+          `The average uses ${report.monthCount} complete months. Partial months stay in the table but are outside the average.`,
+        )
+      : tr(
+          `هنوز سه ماه کامل نیست؛ میانگین روی هر ${report.monthCount} ماه موجود است، از جمله ماه ناقص.`,
+          `There are not yet three complete months. The average uses all ${report.monthCount} months on record, including partial ones.`,
+        );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <h4 className="text-sm font-medium text-fg">{tr("بازده ماهانه مدل", "Monthly model return")}</h4>
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-subtle">{sample}</p>
+      </div>
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label={tr("میانگین ماهانه", "Average month")} value={formatPct(report.avgMonthly)} />
+        <Stat label={tr("ماهانه مرکب", "Compounded month")} value={formatPct(report.compoundMonthly)} />
+        <Stat label={tr("میانه ماه", "Median month")} value={formatPct(report.medianMonthly)} />
+        <Stat label={tr("بهترین ماه", "Best month")} value={formatPct(report.bestMonth)} />
+        <Stat label={tr("بدترین ماه", "Worst month")} value={formatPct(report.worstMonth)} />
+        <Stat
+          label={tr("ماه‌های مثبت", "Positive months")}
+          value={`${report.positiveMonths}/${report.monthCount}`}
+        />
+        <Stat
+          label={tr("جلوتر از BTC", "Ahead of BTC")}
+          value={`${report.monthsAhead}/${report.monthCount}`}
+        />
+        <Stat label={tr("ماه در مسیر", "Months on the path")} value={String(report.months.length)} />
+      </dl>
+      <div className="h-56 w-full rounded-xl bg-surface p-3 shadow-[var(--shadow-border)]" dir="ltr">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <XAxis dataKey="label" hide />
+            <YAxis
+              width={42}
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "#6e6e77", fontSize: 10, fontFamily: "IBM Plex Mono" }}
+              tickFormatter={(value: number) => `${(value * 100).toFixed(0)}`}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "#121214",
+                border: "1px solid rgb(241 242 244 / 0.12)",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "#f1f2f4",
+              }}
+              formatter={(value, name) => {
+                const n = typeof value === "number" ? value : Number(value);
+                const label = name === "model" ? tr("مدل", "Model") : tr("بیت‌کوین", "Bitcoin");
+                return [`${(n * 100).toFixed(1)}${pct}`, label];
+              }}
+              labelFormatter={(label) => String(label)}
+            />
+            <Bar dataKey="model" fill="#f1f2f4" radius={[2, 2, 0, 0]} />
+            <Bar dataKey="btc" fill="#6e6e77" radius={[2, 2, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-xs text-subtle">
+        {tr("ستون روشن مدل است و ستون تیره همان ماه بیت‌کوین. واحد محور، درصد است.", "The light bar is the model. The dark bar is Bitcoin that same month. The axis is percent.")}
+      </p>
+      <div className="max-h-80 overflow-auto rounded-xl bg-surface shadow-[var(--shadow-border)]">
+        <table className="w-full min-w-[28rem] text-sm">
+          <thead className="sticky top-0 bg-elevated text-xs text-subtle">
+            <tr>
+              <th className="px-3 py-3 text-start font-medium">{tr("ماه", "Month")}</th>
+              <th className="px-3 py-3 text-end font-medium">{tr("مدل", "Model")}</th>
+              <th className="px-3 py-3 text-end font-medium">{tr("بیت‌کوین", "Bitcoin")}</th>
+              <th className="px-3 py-3 text-end font-medium">{tr("اختلاف", "Gap")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key} className="border-t border-border">
+                <td className="px-3 py-3 text-fg">
+                  {row.label}
+                  {row.partial ? <span className="ms-2 text-xs text-subtle">{tr("ناقص", "partial")}</span> : null}
+                  <span className="num ms-2 text-xs text-subtle">
+                    {row.weeks} {tr("هفته", "wk")}
+                  </span>
+                </td>
+                <td className={`num px-3 py-3 text-end ${row.model >= 0 ? "text-up" : "text-down"}`}>
+                  {formatPct(row.model)}
+                </td>
+                <td className={`num px-3 py-3 text-end ${row.btc >= 0 ? "text-up" : "text-down"}`}>
+                  {formatPct(row.btc)}
+                </td>
+                <td className={`num px-3 py-3 text-end ${row.gap >= 0 ? "text-up" : "text-down"}`}>
+                  {formatPct(row.gap)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

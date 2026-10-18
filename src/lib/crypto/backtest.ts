@@ -33,6 +33,15 @@ export type BacktestHolding = {
   returnPct: number;
 };
 
+/** One calendar month of the weekly model path. Return is from the prior month-end equity. */
+export type BacktestMonth = {
+  key: string;
+  model: number;
+  btc: number;
+  weeks: number;
+  partial: boolean;
+};
+
 export type BacktestReport = {
   from: string;
   to: string;
@@ -47,6 +56,17 @@ export type BacktestReport = {
   btcMaxDrawdown: number;
   curve: BacktestPoint[];
   holdings: BacktestHolding[];
+  months: BacktestMonth[];
+  /** Months used for the averages: complete months when there are at least three. */
+  monthCount: number;
+  monthSample: "full" | "all";
+  avgMonthly: number;
+  medianMonthly: number;
+  compoundMonthly: number;
+  bestMonth: number;
+  worstMonth: number;
+  positiveMonths: number;
+  monthsAhead: number;
   assumptions: string[];
   note: string;
 };
@@ -308,13 +328,23 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
 
   const totalReturn = equity - 1;
   const winRate = winners / periods;
+  const months = monthlyPath(curve);
+  const monthStats = summarizeMonths(months);
+  const avgPct = (monthStats.avg * 100).toFixed(1);
+  const modelPct = (totalReturn * 100).toFixed(1);
+  const btcPct = (btcReturn * 100).toFixed(1);
+  const faMonth = monthStats.sample === "full" ? "میانگین ماه‌های کامل مدل" : "میانگین ماه‌های مدل";
+  const enMonth =
+    monthStats.sample === "full"
+      ? "Mean return of the model’s complete months"
+      : "Mean monthly return of the model";
   const note = msg(
     totalReturn >= btcReturn
-      ? `در این مسیر، مدل از خرید و نگهداری بیت‌کوین جلوتر بود: ${(totalReturn * 100).toFixed(1)}٪ در برابر ${(btcReturn * 100).toFixed(1)}٪.`
-      : `در این مسیر بیت‌کوین بهتر بود: مدل ${(totalReturn * 100).toFixed(1)}٪ و BTC ${(btcReturn * 100).toFixed(1)}٪.`,
+      ? `در این مسیر، مدل از خرید و نگهداری بیت‌کوین جلوتر بود: ${modelPct}٪ در برابر ${btcPct}٪. ${faMonth} ${avgPct}٪ بود.`
+      : `در این مسیر بیت‌کوین بهتر بود: مدل ${modelPct}٪ و BTC ${btcPct}٪. ${faMonth} ${avgPct}٪ بود.`,
     totalReturn >= btcReturn
-      ? `On this path the model beat buy-and-hold Bitcoin: ${(totalReturn * 100).toFixed(1)}% versus ${(btcReturn * 100).toFixed(1)}%.`
-      : `On this path Bitcoin was better: the model ${(totalReturn * 100).toFixed(1)}% and BTC ${(btcReturn * 100).toFixed(1)}%.`,
+      ? `On this path the model beat buy-and-hold Bitcoin: ${modelPct}% versus ${btcPct}%. ${enMonth} was ${avgPct}%.`
+      : `On this path Bitcoin was better: the model ${modelPct}% and BTC ${btcPct}%. ${enMonth} was ${avgPct}%.`,
   );
 
   return {
@@ -331,6 +361,16 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
     btcMaxDrawdown: maxDrawdown(btcCurve),
     curve: downsample(curve, 90),
     holdings,
+    months,
+    monthCount: monthStats.count,
+    monthSample: monthStats.sample,
+    avgMonthly: monthStats.avg,
+    medianMonthly: monthStats.median,
+    compoundMonthly: monthStats.compound,
+    bestMonth: monthStats.best,
+    worstMonth: monthStats.worst,
+    positiveMonths: monthStats.positive,
+    monthsAhead: monthStats.ahead,
     assumptions: [
       msg(
         "بازچینش هفتگی روی همان امتیاز اسپات (قدرت نسبی، روند، ورود، ریسک) فقط با داده‌ای که تا همان روز وجود داشته.",
@@ -352,8 +392,101 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
         "جهان تست، ارزهای نقد شونده با تاریخچه بلند بایننس است نه هر صد ارز امروز — سوگیری بقا دارد.",
         "The test universe is liquid names with a long Binance history, not today’s top 100 — it has survivorship bias.",
       ),
+      msg(
+        "بازده ماهانه از آخر هر ماه تا آخر ماه بعد، روی همان مسیر هفتگی و بعد از هزینه جابه‌جایی است. هفته به ماهی می‌رود که در آن تمام شده. این بک‌تست مدل انتخاب میز اصلی است، نه حکم‌های قفل‌شده میز بیت‌کوین. ماهی با کمتر از سه هفته «ناقص» است و اگر سه ماه کامل باشد از میانگین کنار گذاشته می‌شود.",
+        "Monthly return runs from one month-end to the next on the same weekly path, after turnover cost. A week is booked in the month it ends. This backtest is the main desk’s pick model, not the Bitcoin desk’s locked calls. A month with fewer than three weeks is partial, and is left out of the average once three complete months exist.",
+      ),
     ],
     note,
+  };
+}
+
+function monthKey(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+export function monthlyPath(curve: BacktestPoint[]): BacktestMonth[] {
+  if (curve.length === 0) return [];
+  const out: BacktestMonth[] = [];
+  let startEq = 1;
+  let startBtc = 1;
+  let key = "";
+  let lastEq = 1;
+  let lastBtc = 1;
+  let weeks = 0;
+
+  const close = () => {
+    if (weeks === 0) return;
+    out.push({
+      key,
+      model: startEq > 0 ? lastEq / startEq - 1 : 0,
+      btc: startBtc > 0 ? lastBtc / startBtc - 1 : 0,
+      weeks,
+      partial: weeks < 3,
+    });
+  };
+
+  for (const point of curve) {
+    const next = monthKey(point.t);
+    if (weeks > 0 && next !== key) {
+      close();
+      startEq = lastEq;
+      startBtc = lastBtc;
+      weeks = 0;
+    }
+    if (weeks === 0) {
+      key = next;
+    }
+    lastEq = point.equity;
+    lastBtc = point.btc;
+    weeks += 1;
+  }
+  close();
+  return out;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+  return sorted[mid] ?? 0;
+}
+
+function summarizeMonths(months: BacktestMonth[]): {
+  count: number;
+  sample: "full" | "all";
+  avg: number;
+  median: number;
+  compound: number;
+  best: number;
+  worst: number;
+  positive: number;
+  ahead: number;
+} {
+  const full = months.filter((row) => !row.partial);
+  const basis = full.length >= 3 ? full : months;
+  const sample: "full" | "all" = full.length >= 3 ? "full" : "all";
+  const rets = basis.map((row) => row.model);
+  const count = rets.length;
+  if (count === 0) {
+    return { count: 0, sample, avg: 0, median: 0, compound: 0, best: 0, worst: 0, positive: 0, ahead: 0 };
+  }
+  const avg = rets.reduce((sum, value) => sum + value, 0) / count;
+  const growth = basis.reduce((product, row) => product * (1 + row.model), 1);
+  return {
+    count,
+    sample,
+    avg,
+    median: median(rets),
+    compound: growth > 0 ? growth ** (1 / count) - 1 : 0,
+    best: Math.max(...rets),
+    worst: Math.min(...rets),
+    positive: basis.filter((row) => row.model > 0).length,
+    ahead: basis.filter((row) => row.model > row.btc).length,
   };
 }
 
@@ -385,6 +518,16 @@ function emptyReport(note: string): BacktestReport {
     btcMaxDrawdown: 0,
     curve: [],
     holdings: [],
+    months: [],
+    monthCount: 0,
+    monthSample: "all",
+    avgMonthly: 0,
+    medianMonthly: 0,
+    compoundMonthly: 0,
+    bestMonth: 0,
+    worstMonth: 0,
+    positiveMonths: 0,
+    monthsAhead: 0,
     assumptions: [],
     note,
   };
