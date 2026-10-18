@@ -2,6 +2,7 @@ import type { AnalysisResult } from "@/lib/crypto/types";
 import { buildAtrPlan } from "@/lib/crypto/spot-analytics";
 import { ExplainTip } from "./explain-tip";
 import { formatPct, formatUsd } from "./format";
+import { useI18n } from "@/lib/i18n/locale";
 
 const FLOW_LABEL = {
   accumulation: "انباشت",
@@ -16,6 +17,8 @@ export function SpotEngineCard({
   result: AnalysisResult;
   price: number;
 }) {
+  const { tr, locale } = useI18n();
+  const pct = locale === "en" ? "%" : "٪";
   const pick = result.pick;
   const macro = result.macroRisk;
   const cut = Math.min(pick.sizeMultiplier, macro?.sizeMultiplier ?? pick.sizeMultiplier);
@@ -31,9 +34,12 @@ export function SpotEngineCard({
     <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="text-base font-medium text-fg">موتور خرید اسپات</h3>
+          <h3 className="text-base font-medium text-fg">{tr("موتور خرید اسپات", "Spot buy engine")}</h3>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-subtle">
-            این چهار عدد بعد از امتیاز اصلی اعمال می‌شوند: تورم عرضه، جریان ۱۴ روزه، بخش پیشتاز، و حد ضرر بر اساس نوسان.
+            {tr(
+              "این چهار عدد بعد از امتیاز اصلی اعمال می‌شوند: تورم عرضه، جریان ۱۴ روزه، بخش پیشتاز، و حد ضرر بر اساس نوسان.",
+              "These four numbers are applied after the main score: supply dilution, 14-day flow, the leading sector, and a volatility stop.",
+            )}
           </p>
         </div>
         <p

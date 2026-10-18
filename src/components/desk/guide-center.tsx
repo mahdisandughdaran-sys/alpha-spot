@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useI18n } from "@/lib/i18n/locale";
 import { BookOpen } from "lucide-react";
 import type { AnalysisResult } from "@/lib/crypto/types";
 import { buildAtrPlan, type FlowState } from "@/lib/crypto/spot-analytics";

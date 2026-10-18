@@ -7,6 +7,7 @@ import { readConfluence } from "@/lib/crypto/confluence-call";
 import { sizePosition, type ConfluenceReport, type Decision, type FlowLabel } from "@/lib/crypto/confluence";
 import { loadDeskSettings, saveDeskSettings } from "@/lib/crypto/desk-client";
 import { formatUsd } from "./format";
+import { useI18n } from "@/lib/i18n/locale";
 
 const COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "TON", "DOGE", "LINK", "AVAX", "SUI"];
 const RISK_KEY = "alpha-spot-confluence-v1";
@@ -42,6 +43,8 @@ function tone(decision: Decision): string {
 }
 
 export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
+  const { tr, locale } = useI18n();
+  const pct = locale === "en" ? "%" : "٪";
   const load = useServerFn(readConfluence);
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [draft, setDraft] = useState(defaultSymbol);
@@ -75,7 +78,7 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
       } catch (err) {
         if (!stop) {
           setReport(null);
-          setError(err instanceof Error ? err.message : "داده جریان خوانده نشد.");
+          setError(err instanceof Error ? err.message : tr("داده جریان خوانده نشد.", "Flow data could not be read."));
         }
       } finally {
         if (!stop) setBusy(false);
@@ -96,13 +99,13 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
   const allowed =
     verdict && verdict.decision !== "AVOID" && verdict.entryPrice != null ? sized.positionUsd : 0;
   const entryText =
-    verdict?.entryPrice != null && verdict.decision !== "AVOID" ? `$${formatUsd(verdict.entryPrice)}` : "ندارد";
+    verdict?.entryPrice != null && verdict.decision !== "AVOID" ? `$${formatUsd(verdict.entryPrice)}` : tr("ندارد", "none");
   const styleText =
     verdict?.entryStyle === "market"
-      ? "بازار، روی قیمت فعلی"
+      ? tr("بازار، روی قیمت فعلی", "Market, at the current price")
       : verdict?.entryStyle === "limit_sweep"
-        ? "لیمیت زیر خوشه لیکوییدیشن"
-        : "بدون سفارش";
+        ? tr("لیمیت زیر خوشه لیکوییدیشن", "Limit below the liquidation cluster")
+        : tr("بدون سفارش", "No order");
 
   function setCapitalUsd(value: number) {
     const next = Math.max(0, value);
@@ -119,7 +122,7 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
   function applySymbol(raw: string) {
     const next = raw.trim().toUpperCase();
     if (!/^[A-Z0-9]{2,12}$/.test(next)) {
-      setError("نماد را با حروف انگلیسی وارد کنید.");
+      setError(tr("نماد را با حروف انگلیسی وارد کنید.", "Enter the symbol in Latin letters."));
       return;
     }
     setError(null);
@@ -134,15 +137,21 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="max-w-2xl">
-          <h3 className="text-base font-medium text-fg">همگرایی خرید اسپات</h3>
+          <h3 className="text-base font-medium text-fg">{tr("همگرایی خرید اسپات", "Spot buy confluence")}</h3>
           <p className="mt-1 text-sm leading-relaxed text-muted">
-            جریان حجم، نقشه لیکوییدیشن و اندازه پوزیشن با هم خوانده می‌شوند. خروجی یک جمله است:
-            نقطه ورود و دلاری که فرمول ریسک اجازه می‌دهد.
+            {tr(
+              "جریان حجم، نقشه لیکوییدیشن و اندازه پوزیشن با هم خوانده می‌شوند. خروجی یک جمله است:",
+              "Volume flow, the liquidation map, and position size are read together. The output is one sentence:",
+            )}{" "}
+            {tr(
+              "نقطه ورود و دلاری که فرمول ریسک اجازه می‌دهد.",
+              "The entry, and the dollars the risk formula allows.",
+            )}
           </p>
         </div>
         <Button variant="outline" onClick={() => setNonce((n) => n + 1)} disabled={busy}>
           {busy ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-          خواندن دوباره
+          {tr("خواندن دوباره", "Read again")}
         </Button>
       </div>
 
@@ -174,17 +183,17 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
           onChange={(event) => setDraft(event.target.value.toUpperCase())}
           className="num h-11 min-w-0 flex-1 rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] outline-none"
           dir="ltr"
-          aria-label="نماد"
+          aria-label={tr("نماد", "Symbol")}
           placeholder="BTC"
         />
         <Button type="submit" variant="outline" className="shrink-0">
-          نماد
+          {tr("نماد", "Symbol")}
         </Button>
       </form>
 
       {busy && !report ? (
         <div className="rounded-xl bg-surface p-6">
-          <p className="text-sm text-fg">کندل اسپات، تیکر خریدار و خوشه‌های لیکوییدیشن خوانده می‌شود.</p>
+          <p className="text-sm text-fg">{tr("کندل اسپات، تیکر خریدار و خوشه‌های لیکوییدیشن خوانده می‌شود.", "Reading the spot candles, taker buy, and liquidation clusters.")}</p>
           <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-elevated">
             <div className="shimmer h-full w-2/3 rounded-full bg-accent/40" />
           </div>
@@ -205,16 +214,16 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
               <p className="num text-sm">{report.pair}</p>
             </div>
             <p className="mt-3 text-lg font-medium leading-relaxed text-fg">
-              بهترین نقطه ورود: <span className="num">{entryText}</span>
+              {tr("بهترین نقطه ورود", "Best entry")}: <span className="num">{entryText}</span>
               {" | "}
-              حجم مجاز خرید: <span className="num">${formatUsd(allowed)}</span>
+              {tr("حجم مجاز خرید", "Allowed buy size")}: <span className="num">${formatUsd(allowed)}</span>
             </p>
             <p className="mt-2 text-sm text-fg">
-              {DECISION_LABEL[verdict.decision]} · {styleText}
+              {tr(DECISION_LABEL[verdict.decision])} · {styleText}
               {report.price ? (
                 <>
                   {" "}
-                  · قیمت <span className="num">${formatUsd(report.price)}</span>
+                  · {tr("قیمت", "Price")} <span className="num">${formatUsd(report.price)}</span>
                 </>
               ) : null}
             </p>
@@ -224,10 +233,10 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
             <header className="flex flex-wrap items-end justify-between gap-2">
               <div>
                 <p className="num text-xs text-subtle">۰۱</p>
-                <h4 className="mt-1 text-sm text-fg">جریان حجم</h4>
+                <h4 className="mt-1 text-sm text-fg">{tr("جریان حجم", "Volume flow")}</h4>
               </div>
               <p className={`rounded-md px-3 py-1 text-xs ${flow.label === "fake_pump" || flow.label === "distribution" ? "bg-down-dim text-down" : flow.label === "balanced" ? "bg-elevated text-muted" : "bg-up-dim text-up"}`}>
-                {FLOW_LABEL[flow.label]}
+                {tr(FLOW_LABEL[flow.label])}
               </p>
             </header>
             <p className="mt-3 text-sm leading-relaxed text-muted">{verdict.reasons[0]}</p>
@@ -236,17 +245,17 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
             </div>
             <div className="mt-2 flex justify-between text-xs text-subtle">
               <span>
-                خریدار ۲۴س <span className="num text-up">{(buyShare * 100).toFixed(1)}٪</span>
+                {tr("خریدار ۲۴س", "24h buyer")} <span className="num text-up">{(buyShare * 100).toFixed(1)}{pct}</span>
               </span>
               <span>
-                فروشنده <span className="num text-down">{((1 - buyShare) * 100).toFixed(1)}٪</span>
+                {tr("فروشنده", "Seller")} <span className="num text-down">{((1 - buyShare) * 100).toFixed(1)}{pct}</span>
               </span>
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Stat k="خرید ۴س" v={`${(flow.buyRatio4h * 100).toFixed(1)}٪`} />
-              <Stat k="خرید ۲۴س" v={`${(flow.buyRatio24h * 100).toFixed(1)}٪`} />
-              <Stat k="بازده ۴س" v={`${flow.ret4h >= 0 ? "+" : ""}${(flow.ret4h * 100).toFixed(2)}٪`} />
-              <Stat k="شتاب حجم" v={flow.volumeAccel.toFixed(2)} />
+              <Stat k={tr("خرید ۴س", "4h buy")} v={`${(flow.buyRatio4h * 100).toFixed(1)}${pct}`} />
+              <Stat k={tr("خرید ۲۴س", "24h buy")} v={`${(flow.buyRatio24h * 100).toFixed(1)}${pct}`} />
+              <Stat k={tr("بازده ۴س", "4h return")} v={`${flow.ret4h >= 0 ? "+" : ""}${(flow.ret4h * 100).toFixed(2)}${pct}`} />
+              <Stat k={tr("شتاب حجم", "Volume acceleration")} v={flow.volumeAccel.toFixed(2)} />
             </dl>
             <div className="mt-4 h-28 w-full" dir="ltr">
               {chartReady ? (
@@ -261,7 +270,7 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
                         if (!Number.isFinite(n)) return null;
                         return (
                           <div className="glass-pop rounded-lg px-3 py-2">
-                            <p className="text-xs text-subtle">دلتای ساعتی</p>
+                            <p className="text-xs text-subtle">{tr("دلتای ساعتی", "Hourly delta")}</p>
                             <p className={`num text-sm ${n >= 0 ? "text-up" : "text-down"}`}>{n.toFixed(2)}</p>
                           </div>
                         );
@@ -284,10 +293,10 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
             <header className="flex flex-wrap items-end justify-between gap-2">
               <div>
                 <p className="num text-xs text-subtle">۰۲</p>
-                <h4 className="mt-1 text-sm text-fg">نقشه لیکوییدیشن</h4>
+                <h4 className="mt-1 text-sm text-fg">{tr("نقشه لیکوییدیشن", "Liquidation map")}</h4>
               </div>
               <p className="text-xs text-subtle">
-                {report.candleSource === "futures" ? "کندل فیوچرز" : "کندل اسپات، فیوچرز در دسترس نبود"}
+                {report.candleSource === "futures" ? tr("کندل فیوچرز", "Futures candle") : tr("کندل اسپات، فیوچرز در دسترس نبود", "Spot candle; futures were unavailable")}
               </p>
             </header>
             <p className={`mt-3 rounded-md px-3 py-3 text-sm leading-relaxed ${verdict.insideWall ? "bg-down-dim text-down" : verdict.sweepZone ? "bg-warn-dim text-warn" : "bg-elevated text-fg"}`}>
@@ -295,14 +304,14 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
             </p>
             <dl className="mt-4 grid grid-cols-3 gap-3">
               <Stat
-                k="فاندینگ ۸س"
-                v={report.funding8h == null ? "—" : `${(report.funding8h * 100).toFixed(4)}٪`}
+                k={tr("فاندینگ ۸س", "8h funding")}
+                v={report.funding8h == null ? "—" : `${(report.funding8h * 100).toFixed(4)}${pct}`}
               />
               <Stat
-                k="سود باز"
+                k={tr("سود باز", "Open interest")}
                 v={report.openInterestUsd == null ? "—" : `$${formatUsd(report.openInterestUsd)}`}
               />
-              <Stat k="لانگ/شورت" v={report.longShortRatio == null ? "—" : report.longShortRatio.toFixed(2)} />
+              <Stat k={tr("لانگ/شورت", "Long/short")} v={report.longShortRatio == null ? "—" : report.longShortRatio.toFixed(2)} />
             </dl>
             <div className="mt-4 flex max-h-80 flex-col gap-1 overflow-y-auto" dir="ltr">
               <Heatmap price={report.price} bins={report.map.bins} />
@@ -311,13 +320,13 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
               {report.map.clusters.slice(0, 4).map((cluster) => (
                 <li key={`${cluster.side}-${cluster.price}`} className="rounded-md bg-elevated px-3 py-3 text-xs text-muted">
                   <span className={cluster.side === "long" ? "text-down" : "text-up"}>
-                    {cluster.side === "long" ? "لانگ" : "شورت"}
+                    {cluster.side === "long" ? tr("لانگ", "Long") : tr("شورت", "Short")}
                   </span>
                   {" "}
                   <span className="num text-fg">${formatUsd(cluster.price)}</span>
                   {" · "}
-                  <span className="num">{(cluster.distance * 100).toFixed(2)}٪</span>
-                  {" · حرارت "}
+                  <span className="num">{(cluster.distance * 100).toFixed(2)}{pct}</span>
+                  {tr(" · حرارت ", " · heat ")}
                   <span className="num">{cluster.heat.toFixed(2)}</span>
                 </li>
               ))}
@@ -326,19 +335,22 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
 
           <article className="rounded-xl bg-surface p-5">
             <p className="num text-xs text-subtle">۰۳</p>
-            <h4 className="mt-1 text-sm text-fg">حجم پوزیشن و توصیه</h4>
+            <h4 className="mt-1 text-sm text-fg">{tr("حجم پوزیشن و توصیه", "Position size and guidance")}</h4>
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              حجم ($) = (سرمایه × ریسک٪) / حدضرر٪. حداکثر ضرر همان سرمایه ضربدر ریسک است، مستقل از حدضرر.
+              {tr(
+                "حجم ($) = (سرمایه × ریسک٪) / حدضرر٪. حداکثر ضرر همان سرمایه ضربدر ریسک است، مستقل از حدضرر.",
+                "Size ($) = (capital × risk%) / stop%. Max loss is capital times risk, and it does not depend on the stop distance.",
+              )}
             </p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <Field
-                label="سرمایه ($)"
+                label={tr("سرمایه ($)", "Capital ($)")}
                 value={capital}
                 onChange={setCapitalUsd}
               />
-              <Field label="ریسک هر معامله (٪)" value={riskPct} onChange={setRisk} />
+              <Field label={tr("ریسک هر معامله (٪)", "Risk per trade (%)")} value={riskPct} onChange={setRisk} />
               <Field
-                label="حد ضرر (٪)"
+                label={tr("حد ضرر (٪)", "Stop (%)")}
                 value={stopPct}
                 onChange={(value) => {
                   setStopLocked(true);
@@ -355,34 +367,45 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
                   setStopPct(Number((verdict.stopPct * 100).toFixed(2)));
                 }}
               >
-                بازگشت حد ضرر به سطح مدل ({(verdict.stopPct * 100).toFixed(2)}٪)
+                {tr("بازگشت حد ضرر به سطح مدل", "Reset the stop to the model level")} ({(verdict.stopPct * 100).toFixed(2)}{pct})
               </button>
             ) : (
               <p className="mt-2 text-xs text-subtle">
-                حد ضرر اولیه زیر خوشه لانگ است و بین ۱٫۵٪ تا ۸٪ بسته شده. می‌توانید عوضش کنید.
+                {tr(
+                  "حد ضرر اولیه زیر خوشه لانگ است و بین ۱٫۵٪ تا ۸٪ بسته شده. می‌توانید عوضش کنید.",
+                  "The initial stop sits under the long cluster and is clamped between 1.5% and 8%. You can change it.",
+                )}
               </p>
             )}
             <dl className="mt-4 grid grid-cols-2 gap-3">
-              <Stat k="حجم محاسبه‌شده" v={`$${formatUsd(sized.positionUsd)}`} />
-              <Stat k="حداکثر ضرر" v={`$${formatUsd(sized.maxLossUsd)}`} />
+              <Stat k={tr("حجم محاسبه‌شده", "Calculated size")} v={`$${formatUsd(sized.positionUsd)}`} />
+              <Stat k={tr("حداکثر ضرر", "Max loss")} v={`$${formatUsd(sized.maxLossUsd)}`} />
               <Stat
-                k="تعداد تقریبی"
+                k={tr("تعداد تقریبی", "Approximate count")}
                 v={
                   verdict.entryPrice && sized.positionUsd > 0
                     ? (sized.positionUsd / verdict.entryPrice).toPrecision(4)
                     : "—"
                 }
               />
-              <Stat k="حد ضرر قیمتی" v={verdict.stopPrice ? `$${formatUsd(verdict.stopPrice)}` : "—"} />
+              <Stat k={tr("حد ضرر قیمتی", "Stop price")} v={verdict.stopPrice ? `$${formatUsd(verdict.stopPrice)}` : "—"} />
             </dl>
             {verdict.decision === "AVOID" ? (
               <p className="mt-3 text-sm text-down">
-                توصیه اجتناب است، پس حجم مجاز خرید صفر است. عدد بالا فقط خروجی فرمول است اگر خودتان خلاف سیگنال وارد شوید.
+                {tr(
+                  "توصیه اجتناب است، پس حجم مجاز خرید صفر است. عدد بالا فقط خروجی فرمول است اگر خودتان خلاف سیگنال وارد شوید.",
+                  "The call is avoid, so the allowed buy size is zero. The figure above is only the formula, if you enter against the signal.",
+                )}
               </p>
             ) : null}
             {verdict.decision !== "AVOID" && sized.positionUsd > capital && capital > 0 ? (
               <p className="mt-3 text-sm text-warn">
-                فرمول ${formatUsd(sized.positionUsd)} را می‌دهد که از سرمایه نقد بزرگ‌تر است. اسپات اهرم ندارد؛ سقف اجرایی ${formatUsd(capital)} است.
+                {tr("فرمول", "The formula")} ${formatUsd(sized.positionUsd)}{" "}
+                {tr(
+                  "را می‌دهد که از سرمایه نقد بزرگ‌تر است. اسپات اهرم ندارد؛ سقف اجرایی",
+                  "is larger than cash capital. Spot has no leverage; the tradable cap is",
+                )}{" "}
+                ${formatUsd(capital)} {tr("است.", "is.")}
               </p>
             ) : null}
             <ul className="mt-4 flex flex-col gap-2">
@@ -395,9 +418,18 @@ export function ConfluencePanel({ defaultSymbol }: { defaultSymbol: string }) {
           </article>
 
           <p className="text-xs leading-relaxed text-subtle">
-            جریان حجم از حجم خرید تیکر کندل اسپات بایننس است؛ همان فشار خرید و فروشی که Volume Flow در Cryptometer نشان می‌دهد.
-            نقشه، خوشه تخمینی است: اهرم ۵ تا ۱۰۰ روی پروفایل حجم، فقط سطوحی که هنوز سویپ نشده‌اند، با وزن فاندینگ و نسبت لانگ/شورت.
-            دیوار اختصاصی Coinglass بدون کلید API جایگزین نشده. این توصیه سرمایه‌گذاری نیست.
+            {tr(
+              "جریان حجم از حجم خرید تیکر کندل اسپات بایننس است؛ همان فشار خرید و فروشی که Volume Flow در Cryptometer نشان می‌دهد.",
+              "Volume flow is Binance spot taker-buy volume — the same buy and sell pressure Cryptometer calls Volume Flow.",
+            )}{" "}
+            {tr(
+              "نقشه، خوشه تخمینی است: اهرم ۵ تا ۱۰۰ روی پروفایل حجم، فقط سطوحی که هنوز سویپ نشده‌اند، با وزن فاندینگ و نسبت لانگ/شورت.",
+              "The map is an estimated cluster: 5x to 100x on the volume profile, only levels not yet swept, weighted by funding and the long/short ratio.",
+            )}{" "}
+            {tr(
+              "دیوار اختصاصی Coinglass بدون کلید API جایگزین نشده. این توصیه سرمایه‌گذاری نیست.",
+              "A proprietary Coinglass wall is not replaced without an API key. This is not investment advice.",
+            )}
           </p>
         </>
       ) : null}
@@ -453,6 +485,7 @@ function Heatmap({
   price: number;
   bins: ConfluenceReport["map"]["bins"];
 }) {
+  const { tr } = useI18n();
   const rows = [...bins].sort((a, b) => b.price - a.price);
   const near = rows.filter((bin) => Math.abs(bin.price - price) / price < 0.08 || bin.longHeat > 0.2 || bin.shortHeat > 0.2);
   const shown = (near.length >= 8 ? near : rows).slice(0, 28);
@@ -470,7 +503,7 @@ function Heatmap({
               <div className="my-1 flex items-center gap-2 text-xs text-fg">
                 <span className="num">${formatUsd(price)}</span>
                 <span className="h-px flex-1 bg-accent" />
-                <span>قیمت</span>
+                <span>{tr("قیمت", "Price")}</span>
               </div>
             ) : null}
             <div className="grid grid-cols-[88px_1fr_1fr] items-center gap-2">
@@ -486,8 +519,8 @@ function Heatmap({
         );
       })}
       <div className="mt-2 flex justify-between text-xs text-subtle">
-        <span className="text-down">حرارت لانگ، زیر قیمت</span>
-        <span className="text-up">حرارت شورت، بالای قیمت</span>
+        <span className="text-down">{tr("حرارت لانگ، زیر قیمت", "Long heat, below price")}</span>
+        <span className="text-up">{tr("حرارت شورت، بالای قیمت", "Short heat, above price")}</span>
       </div>
     </>
   );
