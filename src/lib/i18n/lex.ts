@@ -1,3 +1,5 @@
+import { applyEnglish, hasPersian } from "./apply-en.ts";
+
 export type Locale = "fa" | "en";
 
 /** Invisible separator. Persian stays the prefix so existing checks still match. */
@@ -32,5 +34,8 @@ export function plain(value: string): string {
 export function tr(value: string, en?: string): string {
   const parts = splitBi(value);
   if (locale !== "en") return parts.fa;
-  return en ?? parts.en ?? parts.fa;
+  const chosen = en ?? parts.en;
+  if (chosen && !hasPersian(chosen) && !chosen.includes("٪")) return chosen;
+  if (chosen && !hasPersian(chosen)) return applyEnglish(chosen);
+  return applyEnglish(parts.fa);
 }

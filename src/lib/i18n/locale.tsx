@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { mountEnglishShield } from "@/lib/i18n/english-shield";
 import { getLocale, setLocaleStore, tr as translate, type Locale } from "@/lib/i18n/lex";
 
 const KEY = "alpha-spot-locale";
@@ -30,6 +31,8 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     document.documentElement.dir = locale === "en" ? "ltr" : "rtl";
     document.title = locale === "en" ? "Alpha Spot" : "آلفا اسپات";
   }, [locale]);
+
+  useLayoutEffect(() => mountEnglishShield(() => getLocale() === "en"), [locale]);
 
   const value = useMemo<I18n>(
     () => ({
