@@ -44,9 +44,9 @@ export async function loadTopSpotBoard(force = false): Promise<SpotBoard> {
 
   const [ranked, bases] = await Promise.all([fetchRanked(), fetchUsdtBases()]);
   const source = ranked.rows.length > 0 ? "live" : "fallback";
-  const candidates = pickTopSpot(ranked.rows, bases, TOP_SPOT + 20);
+  const candidates = pickTopSpot(ranked.rows, bases, TOP_SPOT + 40);
   rememberSpotNames(candidates);
-  const plans = await firstPlans(candidates, TOP_SPOT, 8);
+  const plans = await firstPlans(candidates, TOP_SPOT, 16);
   const rows: SpotBoardRow[] = [];
   for (let i = 0; i < candidates.length && rows.length < TOP_SPOT; i++) {
     const plan = plans[i];
@@ -59,7 +59,7 @@ export async function loadTopSpotBoard(force = false): Promise<SpotBoard> {
       plan,
     });
   }
-  if (rows.length < 20) throw new Error("تحلیل پنجاه ارز اول کامل نشد. کمی بعد دوباره بزن.");
+  if (rows.length < 20) throw new Error("تحلیل صد ارز اول کامل نشد. کمی بعد دوباره بزن.");
 
   const value: SpotBoard = {
     fetchedAt: new Date().toISOString(),

@@ -13,8 +13,8 @@ const ROWS = [
   {
     qFa: "خروجی",
     qEn: "Output",
-    btcFa: "تا پنجاه ارز. هر کدام سه حکم جدا: یک روز، یک هفته، یک ماه.",
-    btcEn: "Up to fifty coins. Each one gets three separate calls: a day, a week, a month.",
+    btcFa: "تا صد ارز. هر کدام سه حکم جدا: یک روز، یک هفته، یک ماه.",
+    btcEn: "Up to one hundred coins. Each one gets three separate calls: a day, a week, a month.",
     otherFa: "یک برنده. اگر آلت‌ها ضعیف باشند، خود بیت‌کوین برنده است.",
     otherEn: "One winner. If the alts are weak, Bitcoin itself wins.",
   },
@@ -84,8 +84,8 @@ const OTHERS = [
   {
     tFa: "پرتفوی و پایش",
     tEn: "Portfolio and watch",
-    dFa: "اندازه و خروج همان انتخاب میز اصلی. برد پنجاه ارز میز بیت‌کوین نیست.",
-    dEn: "Size and exit for the main desk’s pick. Not the Bitcoin desk’s board of fifty.",
+    dFa: "اندازه و خروج همان انتخاب میز اصلی. برد صد ارز میز بیت‌کوین نیست.",
+    dEn: "Size and exit for the main desk’s pick. Not the Bitcoin desk’s board of one hundred.",
   },
   {
     tFa: "بک‌تست",
@@ -127,8 +127,8 @@ export function DeskCompare({ here = "home" }: { here?: "home" | "btc" }) {
           <h3 className="mt-1 text-base font-medium text-fg">{tr("میز بیت‌کوین", "Bitcoin desk")}</h3>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             {tr(
-              "پنجاه ارز اول، بدون استیبل و رپد. بیت‌کوین همیشه اول فهرست است. هر ردیف سطح ورود، فروش بالایی و فروش پایینی خودش را دارد.",
-              "The top fifty, with stables and wrapped assets left out. Bitcoin is always first on the list. Each row has its own entry, upside sell, and downside sell.",
+              "صد ارز اول، بدون استیبل و رپد. بیت‌کوین همیشه اول فهرست است. هر ردیف سطح ورود، فروش بالایی و فروش پایینی خودش را دارد.",
+              "The top one hundred, with stables and wrapped assets left out. Bitcoin is always first on the list. Each row has its own entry, upside sell, and downside sell.",
             )}
           </p>
           {here === "home" ? (

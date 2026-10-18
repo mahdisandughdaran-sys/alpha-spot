@@ -166,7 +166,7 @@ function SpotDeskPage() {
               </h1>
               <p className="mt-3 text-base leading-relaxed text-muted">
                 {tr(
-                  `پنجاه ارز اولِ غیر استیبل و غیر رپد، هر کدام با سه حکم جدا: یک روز، یک هفته، یک ماه. اگر آن بازه وقت خرید اسپات نباشد، جواب این است که هیچ ارزی نخری. حکم هفته و ماه تا پایان اعتبار عوض نمی‌شود. بیت‌کوین همیشه اول فهرست است.`,
+                  `صد ارز اولِ غیر استیبل و غیر رپد، هر کدام با سه حکم جدا: یک روز، یک هفته، یک ماه. اگر آن بازه وقت خرید اسپات نباشد، جواب این است که هیچ ارزی نخری. حکم هفته و ماه تا پایان اعتبار عوض نمی‌شود. بیت‌کوین همیشه اول فهرست است.`,
                   `The top ${TOP_SPOT} coins, with stables and wrapped assets left out. Each one gets three calls: one day, one week, one month. If that window is not a spot buy, the answer is to buy no coin. The week and month calls do not change before they expire. Bitcoin stays first.`,
                 )}
               </p>

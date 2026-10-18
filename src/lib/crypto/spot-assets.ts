@@ -1,5 +1,5 @@
 /**
- * The Bitcoin desk analyses the top fifty spot coins with one engine.
+ * The Bitcoin desk analyses the top one hundred spot coins with one engine.
  * SPOT_ASSETS is the offline fallback when the live market-cap list is down.
  * A live pass can replace this order; every row stays on a Binance USDT pair.
  */
@@ -24,7 +24,7 @@ export type PickedSpot = SpotAsset & {
   marketRank: number | null;
 };
 
-export const TOP_SPOT = 50;
+export const TOP_SPOT = 100;
 
 const NAME_FA: Record<string, string> = {
   BTC: "بیت‌کوین",
@@ -109,6 +109,38 @@ const NAME_FA: Record<string, string> = {
   MORPHO: "مورفو",
   XDC: "اکس‌دی‌سی",
   ASTER: "آستر",
+  SAND: "سندباکس",
+  MANA: "دیسنترالند",
+  AXS: "اکسی اینفینیتی",
+  GALA: "گالا",
+  APE: "ایپ‌کوین",
+  CHZ: "چیلیز",
+  THETA: "تتا",
+  EGLD: "مولتی‌ورس‌ایکس",
+  FLOW: "فلو",
+  XTZ: "تزوس",
+  NEO: "نئو",
+  COMP: "کامپاند",
+  SNX: "سینتتیکس",
+  SUSHI: "سوشی‌سواپ",
+  "1INCH": "وان‌اینچ",
+  BAT: "بت",
+  ZRX: "زیرو اکس",
+  YFI: "یرن فایننس",
+  MINA: "مینا",
+  KAVA: "کاوا",
+  CFX: "کانفلاکس",
+  GMX: "جی‌ام‌اکس",
+  BLUR: "بلر",
+  RPL: "راکت‌پول",
+  WOO: "وو",
+  GMT: "استپن",
+  MASK: "مسک نتورک",
+  API3: "ای‌پی‌آی۳",
+  SKL: "اسکل",
+  JASMY: "جاسمی",
+  NOT: "نات‌کوین",
+  TWT: "تراست ولت",
 };
 
 const extraNames = new Map<string, { nameFa: string; nameEn: string }>();
@@ -186,6 +218,56 @@ export const SPOT_ASSETS: SpotAsset[] = [
   row("BONK", "Bonk"),
   row("WIF", "dogwifhat"),
   row("LDO", "Lido"),
+  row("QNT", "Quant"),
+  row("RUNE", "THORChain"),
+  row("VET", "VeChain"),
+  row("ALGO", "Algorand"),
+  row("DASH", "Dash"),
+  row("MKR", "Maker"),
+  row("PENDLE", "Pendle"),
+  row("JTO", "Jito"),
+  row("PYTH", "Pyth Network"),
+  row("FLOKI", "FLOKI"),
+  row("AR", "Arweave"),
+  row("CRV", "Curve"),
+  row("ENS", "Ethereum Name Service"),
+  row("STRK", "Starknet"),
+  row("CAKE", "PancakeSwap"),
+  row("DYDX", "dYdX"),
+  row("VIRTUAL", "Virtuals Protocol"),
+  row("MORPHO", "Morpho"),
+  row("SAND", "The Sandbox"),
+  row("MANA", "Decentraland"),
+  row("AXS", "Axie Infinity"),
+  row("GALA", "Gala"),
+  row("APE", "ApeCoin"),
+  row("CHZ", "Chiliz"),
+  row("THETA", "Theta Network"),
+  row("EGLD", "MultiversX"),
+  row("FLOW", "Flow"),
+  row("XTZ", "Tezos"),
+  row("NEO", "Neo"),
+  row("COMP", "Compound"),
+  row("SNX", "Synthetix"),
+  row("SUSHI", "SushiSwap"),
+  row("1INCH", "1inch"),
+  row("BAT", "Basic Attention Token"),
+  row("ZRX", "0x"),
+  row("YFI", "yearn.finance"),
+  row("MINA", "Mina"),
+  row("KAVA", "Kava"),
+  row("CFX", "Conflux"),
+  row("GMX", "GMX"),
+  row("BLUR", "Blur"),
+  row("RPL", "Rocket Pool"),
+  row("WOO", "WOO"),
+  row("GMT", "STEPN"),
+  row("MASK", "Mask Network"),
+  row("API3", "API3"),
+  row("SKL", "SKALE"),
+  row("JASMY", "JasmyCoin"),
+  row("NOT", "Notcoin"),
+  row("TWT", "Trust Wallet Token"),
 ];
 
 export function getSpotAsset(id: string): SpotAsset | null {

@@ -11,7 +11,6 @@ import {
 import { msg } from "@/lib/i18n/lex";
 
 const HOST: Record<VenueCall["venue"], string> = {
-  wallex: "api.wallex.ir",
   binance: "api.binance.com",
   bybit: "api.bybit.com",
 };
@@ -184,22 +183,6 @@ function accepted(res: HttpResult): boolean {
   return true;
 }
 
-async function probeWallex(input: VenueCall): Promise<VenueResult> {
-  const res = await privateCall(HOST.wallex, "/v1/account/balances", {
-    method: "GET",
-    headers: { "x-api-key": input.key.trim() },
-  });
-  if (!accepted(res)) return fail(input, msg(`والکس موجودی را نداد. ${res.text}`, `Wallex did not return balances. ${res.text}`));
-  return {
-    ok: true,
-    action: "probe",
-    detail: msg("اتصال والکس برقرار شد. کلید روی سرور ذخیره نشد.", "Wallex is connected. The key was not stored on the server."),
-    balances: pullBalances(res.json),
-    orderId: null,
-    planned: "",
-  };
-}
-
 async function probeBinance(input: VenueCall): Promise<VenueResult> {
   const timestamp = Date.now();
   const query = `timestamp=${timestamp}&recvWindow=5000`;
@@ -247,15 +230,6 @@ async function probeBybit(input: VenueCall): Promise<VenueResult> {
 async function placeSigned(input: VenueCall): Promise<VenueResult> {
   const plan = planVenueOrder(input);
   const planned = describePlan(plan);
-  if (input.venue === "wallex" && plan.body) {
-    const res = await privateCall(HOST.wallex, plan.path, {
-      method: "POST",
-      headers: { "x-api-key": input.key.trim() },
-      body: JSON.stringify(plan.body),
-    });
-    if (!accepted(res)) return fail(input, msg(`والکس سفارش را نپذیرفت. ${res.text}`, `Wallex rejected the order. ${res.text}`), planned);
-    return placed(input, "سفارش والکس ثبت شد.", "The Wallex order was placed.", digId(res.json), planned);
-  }
   if (input.venue === "binance" && plan.query) {
     const timestamp = Date.now();
     const query = `${plan.query}&recvWindow=5000&timestamp=${timestamp}`;
@@ -331,7 +305,6 @@ export async function executeVenue(input: VenueCall): Promise<VenueResult> {
   }
   try {
     if (input.action === "probe") {
-      if (input.venue === "wallex") return await probeWallex(input);
       if (input.venue === "binance") return await probeBinance(input);
       return await probeBybit(input);
     }

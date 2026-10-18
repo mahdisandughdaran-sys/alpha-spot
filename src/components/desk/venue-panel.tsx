@@ -13,7 +13,6 @@ const inputClass =
   "num h-11 rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] outline-none";
 
 const VENUE_EN: Record<VenueId, string> = {
-  wallex: "Wallex",
   binance: "Binance",
   bybit: "Bybit",
 };
@@ -164,24 +163,12 @@ export function VenuePanel({ result }: { result: AnalysisResult }) {
           {tr("بازار تسویه", "Settlement market")}
           <select
             className={inputClass}
-            value={vault.quote}
-            onChange={(e) => patch({ quote: e.target.value === "IRT" ? "IRT" : "USDT" })}
+            value="USDT"
+            onChange={() => patch({ quote: "USDT" })}
           >
             <option value="USDT">{tr("تتر", "Tether")}</option>
-            <option value="IRT">{tr("تومان / ریال", "Toman / rial")}</option>
           </select>
         </label>
-        {vault.quote === "IRT" ? (
-          <label className="flex flex-col gap-2 text-xs text-subtle">
-            {tr("نرخ هر تتر به تومان", "Toman rate per tether")}
-            <input
-              inputMode="decimal"
-              className={inputClass}
-              value={vault.tomanPerUsdt || ""}
-              onChange={(e) => patch({ tomanPerUsdt: Math.max(0, Number(e.target.value) || 0) })}
-            />
-          </label>
-        ) : null}
       </div>
 
       <p className="text-xs text-subtle">

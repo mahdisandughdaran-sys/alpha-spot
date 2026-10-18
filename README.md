@@ -19,7 +19,7 @@ Alpha-Spot is a right-to-left spot desk for people who measure altcoins **in Bit
 - **Pick vs Bitcoin.** Score liquid coins on the BTC pair. One name comes back, with the reasons and a 30-day BTC chart. If the field is weak, Bitcoin wins.
 - **Opportunity zones.** Names that are not a buy yet: the zone, what would confirm it, and what would invalidate it. Touching the price is not confirmation.
 - **Position size.** `(capital × risk%) / stop%`, next to taker-buy flow and an estimated liquidation map.
-- **Bitcoin desk.** Top non-stable names. One buy, one sell-if-up, one sell-if-down. Stables stay out. Bitcoin stays first.
+- **Bitcoin desk.** Top 100 non-stable names. One buy, one sell-if-up, one sell-if-down. Stables stay out. Bitcoin stays first.
 - **Macro clock.** Tehran and New York sessions, holidays, FOMC / GDP / PCE.
 - **Backtest, with costs.** 10 bps fee and 8 bps slippage per side.
 
@@ -54,7 +54,7 @@ Dev server: http://127.0.0.1:8080
 1. انتخاب — یک نام، دلیل‌ها، نمودار ۳۰روزه جفت BTC
 2. فرصت‌ها — ناحیه، تأیید، ابطال
 3. اندازه پوزیشن — (سرمایه × درصد ریسک) / درصد حد ضرر
-4. میز بیت‌کوین — خرید، فروش بالایی، فروش پایینی
+4. میز بیت‌کوین — صد ارز اول، خرید، فروش بالایی، فروش پایینی
 5. تقویم کلان — تهران، نیویورک، FOMC
 
 این صفحه توصیه سرمایه‌گذاری نیست.

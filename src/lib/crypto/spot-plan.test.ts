@@ -34,7 +34,7 @@ const btc = {
   pair: "BTCUSDT",
 };
 
-test("the bitcoin desk keeps fifty enabled spot assets and bitcoin first", () => {
+test("the bitcoin desk keeps one hundred enabled spot assets and bitcoin first", () => {
   assert.equal(SPOT_ASSETS.length, TOP_SPOT);
   assert.equal(SPOT_ASSETS[0]?.id, "btc");
   assert.equal(getSpotAsset("btc")?.enabled, true);
@@ -47,7 +47,7 @@ test("the bitcoin desk keeps fifty enabled spot assets and bitcoin first", () =>
   assert.equal(getSpotAsset("nope"), null);
 });
 
-test("top fifty skips stables and names that are not on binance", () => {
+test("top one hundred skips stables and names that are not on binance", () => {
   const ranked = [
     { symbol: "BTC", name: "Bitcoin", rank: 1 },
     { symbol: "USDT", name: "Tether", rank: 2 },
@@ -67,7 +67,7 @@ test("top fifty skips stables and names that are not on binance", () => {
   assert.equal(picked[2]?.marketRank, 5);
 });
 
-test("a short live list is filled from the fallback fifty", () => {
+test("a short live list is filled from the fallback hundred", () => {
   const picked = pickTopSpot([{ symbol: "BTC", name: "Bitcoin", rank: 1 }], new Set(["BTC", "ETH", "SOL"]), 3);
   assert.deepEqual(
     picked.map((asset) => asset.symbol),

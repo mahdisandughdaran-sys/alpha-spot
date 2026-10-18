@@ -2,7 +2,6 @@ import { parseVenueBases } from "./listings.ts";
 import type { VenueId } from "./venues.ts";
 
 const URLS: Record<VenueId, string[]> = {
-  wallex: ["https://api.wallex.ir/v1/markets"],
   binance: ["https://data-api.binance.vision/api/v3/ticker/price"],
   bybit: ["https://api.bybit.com/v5/market/instruments-info?category=spot&limit=1000"],
 };

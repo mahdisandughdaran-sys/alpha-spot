@@ -1,14 +1,13 @@
 import { candidateBases } from "./exclusions.ts";
 import { msg } from "@/lib/i18n/lex";
 
-export const VENUES = ["wallex", "binance", "bybit"] as const;
+export const VENUES = ["binance", "bybit"] as const;
 export type VenueId = (typeof VENUES)[number];
 export type QuoteCcy = "USDT" | "IRT";
 export type VenueAction = "probe" | "preview" | "place";
 export type VenueSide = "BUY" | "SELL";
 
 export const VENUE_LABEL: Record<VenueId, string> = {
-  wallex: msg("والکس", "Wallex"),
   binance: msg("بایننس", "Binance"),
   bybit: msg("بای‌بیت", "Bybit"),
 };
@@ -70,21 +69,6 @@ export function venueBase(venue: VenueId, symbol: string): string {
   return upper;
 }
 
-export function guardPrice(side: VenueSide, price: number): number {
-  return side === "BUY" ? price * 1.012 : price * 0.988;
-}
-
-export function quotePrice(input: {
-  priceUsd: number;
-  quote: QuoteCcy;
-  tomanPerUsdt: number;
-  rial: boolean;
-}): number {
-  if (input.quote === "USDT") return input.priceUsd;
-  const toman = input.priceUsd * input.tomanPerUsdt;
-  return input.rial ? toman * 10 : toman;
-}
-
 export function assertSized(input: {
   symbol: string;
   notionalUsd: number;
@@ -101,13 +85,9 @@ export function assertSized(input: {
     throw new Error(msg("حجم هر سفارش باید بین ۵ و ۵۰٬۰۰۰ دلار باشد.", "Each order must be between 5 and 50,000 dollars."));
   }
   if (
-    input.quote === "IRT" &&
-    (input.venue === "binance" || input.venue === "bybit")
+    input.quote === "IRT"
   ) {
-    throw new Error(msg("بایننس و بای‌بیت در این میز فقط بازار تتر را مستقیم ثبت می‌کنند.", "Binance and Bybit on this desk post the USDT market only."));
-  }
-  if (input.quote === "IRT" && !(input.tomanPerUsdt >= 1_000 && input.tomanPerUsdt <= 10_000_000)) {
-    throw new Error(msg("نرخ تتر به تومان را وارد کنید.", "Enter the USDT-to-toman rate."));
+    throw new Error(msg("این میز فقط بازار تتر را مستقیم ثبت می‌کند.", "This desk posts the USDT market only."));
   }
   const qty = Math.floor((notional / input.priceUsd) * 1e6) / 1e6;
   if (!(qty > 0)) throw new Error(msg("حجم پایه صفر شد.", "Base size rounded to zero."));
@@ -123,34 +103,6 @@ export function planVenueOrder(
   const id = clientId(now);
   const side = input.side === "SELL" ? "SELL" : "BUY";
   const qty = money(sized.qty, 6);
-
-  if (input.venue === "wallex") {
-    const tmn = input.quote === "IRT";
-    const price = money(
-      guardPrice(side, quotePrice({ priceUsd: input.priceUsd, quote: input.quote, tomanPerUsdt: input.tomanPerUsdt, rial: false })),
-      tmn ? 0 : 6,
-    );
-    const body = {
-      symbol: `${base}${tmn ? "TMN" : "USDT"}`,
-      side,
-      type: "MARKET",
-      quantity: qty,
-      price,
-      client_id: id,
-    };
-    return {
-      venue: input.venue,
-      summary: msg(
-        `والکس ${side} مارکت ${qty} ${body.symbol} با قیمت محافظ ${price}`,
-        `Wallex ${side} market ${qty} ${body.symbol} with a protective price of ${price}`,
-      ),
-      method: "POST",
-      path: "/v1/account/orders",
-      body,
-      query: null,
-      baseQty: sized.qty,
-    };
-  }
 
   if (input.venue === "binance") {
     const params = new URLSearchParams({

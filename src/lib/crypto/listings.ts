@@ -17,20 +17,6 @@ function addBase(out: Set<string>, value: unknown) {
   if (base) out.add(base);
 }
 
-export function basesFromWallex(payload: unknown): string[] | null {
-  const result = asRecord(asRecord(payload)?.result) ?? asRecord(payload);
-  const symbols = result?.symbols ?? result?.markets ?? asRecord(payload)?.markets;
-  const out = new Set<string>();
-  const take = (row: unknown) => {
-    const rec = asRecord(row);
-    if (!rec) return;
-    addBase(out, rec.baseAsset ?? rec.base_asset ?? rec.base ?? rec.srcCurrency);
-  };
-  if (Array.isArray(symbols)) symbols.forEach(take);
-  else if (symbols && typeof symbols === "object") Object.values(symbols as Record<string, unknown>).forEach(take);
-  return out.size ? [...out] : null;
-}
-
 export function basesFromBinance(payload: unknown): string[] | null {
   const rows = Array.isArray(payload)
     ? payload
@@ -78,7 +64,6 @@ export function basesFromBybit(payload: unknown): string[] | null {
 }
 
 export function parseVenueBases(venue: VenueId, payload: unknown): string[] | null {
-  if (venue === "wallex") return basesFromWallex(payload);
   if (venue === "binance") return basesFromBinance(payload);
   return basesFromBybit(payload);
 }

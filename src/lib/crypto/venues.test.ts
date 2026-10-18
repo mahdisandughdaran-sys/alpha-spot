@@ -7,7 +7,7 @@ import { pullBalances, signEd25519 } from "./venues.server.ts";
 function call(partial: Partial<VenueCall>): VenueCall {
   return {
     action: "preview",
-    venue: "wallex",
+    venue: "binance",
     key: "",
     secret: "",
     symbol: "ETH",
@@ -21,21 +21,16 @@ function call(partial: Partial<VenueCall>): VenueCall {
   };
 }
 
-test("wallex market buy keeps quantity and a protective tether price", () => {
+test("binance market buy spends quote usdt", () => {
   const plan = planVenueOrder(call({}), 1_700_000_000_000);
-  assert.equal(plan.path, "/v1/account/orders");
-  assert.equal(plan.body?.symbol, "ETHUSDT");
-  assert.equal(plan.body?.type, "MARKET");
-  assert.equal(plan.body?.quantity, "0.04");
-  assert.equal(plan.body?.side, "BUY");
+  assert.equal(plan.path, "/api/v3/order");
+  assert.match(plan.query ?? "", /symbol=ETHUSDT/);
+  assert.match(plan.query ?? "", /quoteOrderQty=100/);
+  assert.match(plan.query ?? "", /side=BUY/);
 });
 
-test("wallex toman price uses the tether rate", () => {
-  const plan = planVenueOrder(call({ quote: "IRT", tomanPerUsdt: 50_000 }));
-  const price = Number(plan.body?.price);
-  assert.equal(plan.body?.symbol, "ETHTMN");
-  assert.ok(price > 2500 * 50_000 * 0.98);
-  assert.ok(price < 2500 * 50_000 * 1.03);
+test("toman market is refused", () => {
+  assert.throws(() => planVenueOrder(call({ quote: "IRT", tomanPerUsdt: 50_000 })), /تتر/);
 });
 
 test("binance buy spends quote usdt and bybit does the same", () => {

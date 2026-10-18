@@ -22,7 +22,7 @@ export function PrefsGate({ onSave }: { onSave: (prefs: DeskPrefs) => void }) {
         )}
       </p>
       <p className="mt-6 text-xs text-subtle">{tr("صرافی", "Exchange")}</p>
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {VENUES.map((id) => {
           const on = venue === id;
           return (
