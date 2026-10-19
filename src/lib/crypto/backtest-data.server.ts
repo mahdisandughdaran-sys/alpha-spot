@@ -1,10 +1,13 @@
 import { readCache, writeCache } from "./cache.server.ts";
 import { BACKTEST_UNIVERSE, simulateSpotBacktest, type BtBar, type BacktestReport, type BtSeries } from "./backtest.ts";
+import { loadDominanceSeries, rememberSatelliteEarned } from "./dominance.server.ts";
 import { simulateOpportunityBacktest, type OpportunityBacktestReport } from "./opportunity-backtest.ts";
 
 const BINANCE = "https://data-api.binance.vision/api/v3";
 const FRESH_SEC = 12 * 60 * 60;
 const STALE_SEC = 14 * 24 * 60 * 60;
+/** Keep 2022. The old slice(-1200) started after that crash. */
+const HISTORY_FROM = Date.UTC(2022, 0, 1);
 
 type RawKline = [number, string, string, string, string, string, number, string];
 
@@ -56,32 +59,36 @@ async function fetchWindow(symbol: string, endTime?: number): Promise<unknown[] 
 }
 
 async function loadSymbol(symbol: string): Promise<BtBar[] | null> {
-  const key = `k3y:${symbol}USDT`;
+  const key = `k4y:${symbol}USDT`;
   const cached = await readCache(key, FRESH_SEC);
   if (cached) {
     const parsed = barsFrom(JSON.parse(cached) as unknown);
-    if (parsed.length > 400) return parsed;
+    if (parsed.length > 400 && (parsed[0]?.t ?? Infinity) <= HISTORY_FROM) return parsed;
   }
-  const recent = await fetchWindow(symbol);
-  if (!recent || recent.length < 30) {
+  const dedup = new Map<number, unknown>();
+  let endTime: number | undefined;
+  for (let window = 0; window < 4; window++) {
+    const batch = await fetchWindow(symbol, endTime);
+    if (!batch || batch.length < 30) break;
+    for (const row of batch) {
+      if (Array.isArray(row)) dedup.set(Number(row[0]), row);
+    }
+    const first = batch[0] as RawKline | undefined;
+    const firstT = first ? Number(first[0]) : NaN;
+    if (!Number.isFinite(firstT) || firstT <= HISTORY_FROM) break;
+    endTime = firstT - 1;
+  }
+  if (dedup.size < 30) {
     const stale = await readCache(key, STALE_SEC);
     if (!stale) return null;
     const parsed = barsFrom(JSON.parse(stale) as unknown);
     return parsed.length > 200 ? parsed : null;
   }
-  const first = recent[0] as RawKline | undefined;
-  const older = first ? await fetchWindow(symbol, Number(first[0]) - 1) : null;
-  const merged = [...(older ?? []), ...recent];
-  const dedup = new Map<number, unknown>();
-  for (const row of merged) {
-    if (Array.isArray(row)) dedup.set(Number(row[0]), row);
-  }
   const raw = [...dedup.values()].sort(
     (a, b) => Number((a as RawKline)[0]) - Number((b as RawKline)[0]),
   );
-  const trimmed = raw.slice(-1200);
-  await writeCache(key, JSON.stringify(trimmed));
-  const bars = barsFrom(trimmed);
+  await writeCache(key, JSON.stringify(raw));
+  const bars = barsFrom(raw);
   return bars.length > 200 ? bars : null;
 }
 
@@ -101,7 +108,10 @@ export async function runHistoricalBacktest(): Promise<BacktestReport> {
   if (!series.some((s) => s.symbol === "BTC")) {
     return simulateSpotBacktest([]);
   }
-  return simulateSpotBacktest(series);
+  const dominance = await loadDominanceSeries();
+  const report = simulateSpotBacktest(series, dominance);
+  if (report.weeks > 0) await rememberSatelliteEarned(report.satelliteEarned);
+  return report;
 }
 
 export async function runOpportunityHistory(): Promise<OpportunityBacktestReport> {

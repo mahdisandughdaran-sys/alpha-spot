@@ -12,8 +12,10 @@ export const RISK_FRACTION = 0.01;
 export const VOLUME_FLOOR = 8_000_000;
 /** Free float below this is a veto, not a score. */
 export const FLOAT_VETO = 0.35;
-/** Dominance must be lower than ~30 days earlier by this many points. Not the 7-day median. */
-export const DOMINANCE_DROP = 0.25;
+/** Dominance is stored in percentage points (56 means 56%). A quarter point is noise. */
+export const DOMINANCE_DROP = 1.5;
+/** About thirty days, not the 7-day median. */
+export const DOMINANCE_LOOKBACK_DAYS = 30;
 
 export type BookMode = "core" | "defend" | "cash";
 export type CampaignStatus = "empty" | "waiting" | "open";
@@ -63,6 +65,34 @@ export function dominanceIsFalling(now: number | null, prev: number | null): boo
   if (now == null || prev == null) return false;
   if (!Number.isFinite(now) || !Number.isFinite(prev)) return false;
   return now < prev - DOMINANCE_DROP;
+}
+
+export type DominancePoint = { t: number; v: number };
+
+/** Same-source level now versus ~30 days earlier. A gap or a stale print returns nulls. */
+export function dominanceLookback(
+  series: DominancePoint[],
+  atMs: number,
+  days = DOMINANCE_LOOKBACK_DAYS,
+): { now: number | null; prev: number | null } {
+  if (!series.length || !Number.isFinite(atMs)) return { now: null, prev: null };
+  const now = latestAtOrBefore(series, atMs);
+  const prev = latestAtOrBefore(series, atMs - days * 86_400_000);
+  if (!now || !prev) return { now: null, prev: null };
+  const gapDays = (now.t - prev.t) / 86_400_000;
+  if (gapDays < 20 || gapDays > 45) return { now: null, prev: null };
+  if (atMs - now.t > 5 * 86_400_000) return { now: null, prev: null };
+  return { now: now.v, prev: prev.v };
+}
+
+function latestAtOrBefore(series: DominancePoint[], atMs: number): DominancePoint | null {
+  let found: DominancePoint | null = null;
+  for (const point of series) {
+    if (!Number.isFinite(point.t) || !Number.isFinite(point.v)) continue;
+    if (point.t <= atMs) found = point;
+    else break;
+  }
+  return found;
 }
 
 export function spotVeto(row: CoinRow, listed: Set<string> | null): VetoReason | null {
@@ -310,6 +340,28 @@ export function decideBook(input: {
     ...(candidate && candidate.status !== "open" ? [candidate] : []),
   ];
 
+  const lead = open[0];
+  const verdict =
+    lead != null
+      ? {
+          kind: "buy" as const,
+          symbol: lead.symbol,
+          name: lead.name,
+          priceUsd: lead.entryUsd,
+          reachUsd: null,
+          invalidationUsd: lead.invalidationUsd,
+          reason: holdReason,
+        }
+      : {
+          kind: (candidate?.status === "waiting" ? "wait" : "stay") as "wait" | "stay",
+          symbol: "BTC" as string | null,
+          name: btcName,
+          priceUsd: btcPrice,
+          reachUsd,
+          invalidationUsd: null,
+          reason: holdReason,
+        };
+
   return {
     mode,
     satelliteEarned: input.satelliteEarned,
@@ -319,14 +371,6 @@ export function decideBook(input: {
     cashWeight: 0,
     campaigns,
     candidate,
-    verdict: {
-      kind: candidate?.status === "waiting" ? "wait" : "stay",
-      symbol: "BTC",
-      name: btcName,
-      priceUsd: btcPrice,
-      reachUsd,
-      invalidationUsd: open[0]?.invalidationUsd ?? null,
-      reason: holdReason,
-    },
+    verdict,
   };
 }

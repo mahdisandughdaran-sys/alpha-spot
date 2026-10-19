@@ -1,8 +1,15 @@
 import { lookupMeta } from "./catalog.ts";
-import { bookMode, campaignInvalidation, dominanceIsFalling, RISK_FRACTION, SATELLITE_CAP, VOLUME_FLOOR } from "./book.ts";
+import {
+  bookMode,
+  decideBook,
+  dominanceIsFalling,
+  dominanceLookback,
+  type DominancePoint,
+} from "./book.ts";
 import { evaluateKillSwitch } from "./kill-switch.ts";
 import { maxDrawdown } from "./math.ts";
-import { enrichFromKlines } from "./scoring.ts";
+import { evaluateAsset, type Opportunity, type SpotBar } from "./opportunity.ts";
+import { enrichFromKlines, scoreUniverse } from "./scoring.ts";
 import type { CoinDraft } from "./types.ts";
 import { msg } from "@/lib/i18n/lex";
 
@@ -89,6 +96,29 @@ export type BacktestReport = {
 const WARMUP = 220;
 const STEP = 7;
 const COST_BPS = 15;
+/** The old 1,200-bar sample never saw this window. It includes 2022. */
+export const HOLDOUT_UNTIL_MS = Date.UTC(2023, 6, 1);
+
+export function satelliteBeatBaseline(input: {
+  holdoutWeeks: number;
+  holdoutReturn: number;
+  holdoutBaselineReturn: number;
+  holdoutMaxDrawdown: number;
+  holdoutBaselineMaxDrawdown: number;
+}): boolean {
+  if (input.holdoutWeeks < 12) return false;
+  const values = [
+    input.holdoutReturn,
+    input.holdoutBaselineReturn,
+    input.holdoutMaxDrawdown,
+    input.holdoutBaselineMaxDrawdown,
+  ];
+  if (!values.every((value) => Number.isFinite(value))) return false;
+  return (
+    input.holdoutReturn > input.holdoutBaselineReturn &&
+    input.holdoutMaxDrawdown > input.holdoutBaselineMaxDrawdown
+  );
+}
 
 function dayKey(ms: number): number {
   return Math.floor(ms / 86_400_000);
@@ -198,10 +228,18 @@ function priceAt(map: Map<number, BtBar>, day: number): number | null {
   return bar && bar.c > 0 ? bar.c : null;
 }
 
-export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
+export function simulateSpotBacktest(
+  series: BtSeries[],
+  dominanceSeries: DominancePoint[] = [],
+): BacktestReport {
   const btc = series.find((s) => s.symbol === "BTC");
   if (!btc || btc.bars.length < WARMUP + STEP) {
-    return emptyReport(msg("کندل تاریخی بیت‌کوین برای بک‌تست کافی نبود.", "Historical Bitcoin candles were not enough for the backtest."));
+    return emptyReport(
+      msg(
+        "کندل تاریخی بیت‌کوین برای بک‌تست کافی نبود.",
+        "Historical Bitcoin candles were not enough for the backtest.",
+      ),
+    );
   }
 
   const maps = new Map<string, Map<number, BtBar>>();
@@ -217,22 +255,38 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
 
   const calendar = [...btcMap.keys()].sort((a, b) => a - b);
   if (calendar.length < WARMUP + STEP) {
-    return emptyReport(msg("تقویم روزانه کوتاه‌تر از پنجره گرم‌شدن مدل است.", "The daily calendar is shorter than the model warmup window."));
+    return emptyReport(
+      msg(
+        "تقویم روزانه کوتاه‌تر از پنجره گرم‌شدن مدل است.",
+        "The daily calendar is shorter than the model warmup window.",
+      ),
+    );
   }
 
+  const dominance = dominanceSeries
+    .filter((point) => Number.isFinite(point.t) && Number.isFinite(point.v))
+    .sort((a, b) => a.t - b.t);
+  const listed = new Set(series.map((row) => row.symbol));
+
   let equity = 1;
+  let ruleEquity = 1;
   let btcEquity = 1;
-  let held = "";
+  let holdoutSat = 1;
+  let holdoutRule = 1;
   let trades = 0;
   let winners = 0;
   let periods = 0;
+  let dominanceWeeks = 0;
+  let holdoutWeeks = 0;
   const curve: BacktestPoint[] = [];
+  const holdoutSatCurve: number[] = [];
+  const holdoutRuleCurve: number[] = [];
   const holdDays = new Map<string, { periods: number; ret: number }>();
+  let heldSat: Map<string, number> = new Map();
+  let heldRule: Map<string, number> = new Map();
   const meta = new Map(series.map((s) => [s.symbol, s]));
 
   const startIdx = WARMUP;
-  const startDay = calendar[startIdx] ?? calendar[0]!;
-  const startBtc = priceAt(btcMap, startDay) ?? 1;
 
   for (let i = startIdx; i < calendar.length - 1; i += STEP) {
     const j = Math.min(i + STEP, calendar.length - 1);
@@ -244,16 +298,17 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
     const drafts: CoinDraft[] = [];
     const btcSeries = meta.get("BTC");
     if (!btcSeries) continue;
-    const btcDraft = draftAt({
-      symbol: "BTC",
-      name: btcSeries.name,
-      rank: btcSeries.rank,
-      usd: btcNow.closes,
-      vols: btcNow.vols,
-      pair: btcNow.closes,
-      quote: btcNow.vols[btcNow.vols.length - 1] ?? 0,
-    });
-    drafts.push(btcDraft);
+    drafts.push(
+      draftAt({
+        symbol: "BTC",
+        name: btcSeries.name,
+        rank: btcSeries.rank,
+        usd: btcNow.closes,
+        vols: btcNow.vols,
+        pair: btcNow.closes,
+        quote: btcNow.vols[btcNow.vols.length - 1] ?? 0,
+      }),
+    );
 
     for (const s of series) {
       if (s.symbol === "BTC") continue;
@@ -283,88 +338,165 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
       );
     }
 
-    const { regime } = detectRegime(drafts, 50);
     const kill = evaluateKillSwitch({
       priceUsd: btcNow.closes[btcNow.closes.length - 1] ?? 0,
       closes: btcNow.closes,
     });
-    const scored = scoreUniverse(drafts, regime, { kill }).sort((a, b) => b.score - a.score);
-    if (scored.length === 0) continue;
-    const { pick } = pickWinner(scored, regime, kill);
-    const symbol = pick?.symbol ?? "BTC";
-    const assetMap = maps.get(symbol) ?? btcMap;
-    const p0 = priceAt(symbol === "BTC" ? btcMap : assetMap, day);
-    const p1 = priceAt(symbol === "BTC" ? btcMap : assetMap, nextDay);
+    const scored = scoreUniverse(drafts, "neutral", { kill }).sort((a, b) => b.score - a.score);
+    if (!scored.some((row) => row.symbol === "BTC")) continue;
+
+    const atMs = day * 86_400_000;
+    const dom = dominanceLookback(dominance, atMs);
+    const falling = dominanceIsFalling(dom.now, dom.prev);
+    if (falling) dominanceWeeks += 1;
+
+    const opportunities: Opportunity[] = [];
+    if (bookMode(kill) === "core" && falling) {
+      const generatedAt = new Date(atMs).toISOString();
+      const btcCloses = btcNow.closes.slice(-260);
+      const names = scored
+        .filter(
+          (row) =>
+            row.symbol !== "BTC" &&
+            row.aboveSma === true &&
+            !row.pairSupportBroken &&
+            row.pairWeekly !== "bear" &&
+            row.volume24h >= 8_000_000 &&
+            row.hasBtcPair,
+        )
+        .slice(0, 4);
+      for (const row of names) {
+        const map = maps.get(row.symbol);
+        if (!map) continue;
+        const bars = barsUntil(map, calendar, i);
+        if (bars.length < 80) continue;
+        opportunities.push(
+          evaluateAsset(
+            {
+              symbol: row.symbol,
+              name: row.name,
+              rank: row.rank,
+              priceUsd: row.priceUsd,
+              volume24h: row.volume24h,
+              turnover: row.turnover,
+              bars,
+              btcCloses,
+            },
+            { generatedAt, regime: "neutral", spotBuys: "open" },
+          ),
+        );
+      }
+    }
+
+    const measured = decideBook({
+      ranked: scored,
+      kill,
+      dominance: dom.now,
+      dominancePrev: dom.prev,
+      opportunities,
+      listed,
+      satelliteEarned: true,
+    });
+    const satW = sleeveWeights(measured);
+    const ruleW = cashOnKill(kill.status);
+    const satRet = portReturn(satW, day, nextDay, maps);
+    const ruleRet = portReturn(ruleW, day, nextDay, maps);
     const b0 = priceAt(btcMap, day);
     const b1 = priceAt(btcMap, nextDay);
-    if (!p0 || !p1 || !b0 || !b1) continue;
+    if (satRet == null || ruleRet == null || !b0 || !b1) continue;
 
-    let assetRet = p1 / p0 - 1;
-    const btcRet = b1 / b0 - 1;
-    if (symbol !== "BTC" && kill.status === "HIGH_RISK") {
-      assetRet = 0.5 * assetRet + 0.5 * btcRet;
-    }
-    if (symbol !== "BTC" && kill.status === "SUSPENDED") {
-      assetRet = btcRet;
-    }
+    const satTurn = turnoverOf(heldSat, satW);
+    const ruleTurn = turnoverOf(heldRule, ruleW);
+    const satPeriod = (1 + satRet) * (1 - (satTurn * COST_BPS) / 10_000) - 1;
+    const rulePeriod = (1 + ruleRet) * (1 - (ruleTurn * COST_BPS) / 10_000) - 1;
+    if (satTurn > 1e-8) trades += 1;
+    heldSat = satW;
+    heldRule = ruleW;
 
-    let cost = 0;
-    if (symbol !== held) {
-      trades += 1;
-      cost = COST_BPS / 10_000;
-      held = symbol;
-    }
-    const period = (1 + assetRet) * (1 - cost) - 1;
-    equity *= 1 + period;
-    if (periods === 0) btcEquity = 1;
-    btcEquity *= 1 + btcRet;
+    equity *= 1 + satPeriod;
+    ruleEquity *= 1 + rulePeriod;
+    btcEquity *= 1 + (b1 / b0 - 1);
     periods += 1;
-    if (period > 0) winners += 1;
-    const bucket = holdDays.get(symbol) ?? { periods: 0, ret: 0 };
+    if (satPeriod > 0) winners += 1;
+
+    const primary = [...satW.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "BTC";
+    const bucket = holdDays.get(primary) ?? { periods: 0, ret: 0 };
     bucket.periods += 1;
-    bucket.ret = (1 + bucket.ret) * (1 + period) - 1;
-    holdDays.set(symbol, bucket);
-    curve.push({
-      t: nextDay * 86_400_000,
-      equity,
-      btc: btcEquity,
-    });
+    bucket.ret = (1 + bucket.ret) * (1 + satPeriod) - 1;
+    holdDays.set(primary, bucket);
+
+    const weekMs = nextDay * 86_400_000;
+    curve.push({ t: weekMs, equity, btc: btcEquity, rule: ruleEquity });
+    if (atMs < HOLDOUT_UNTIL_MS) {
+      holdoutSat *= 1 + satPeriod;
+      holdoutRule *= 1 + rulePeriod;
+      holdoutSatCurve.push(holdoutSat);
+      holdoutRuleCurve.push(holdoutRule);
+      holdoutWeeks += 1;
+    }
   }
 
   if (periods === 0 || curve.length === 0) {
-    return emptyReport(msg("در این بازه هیچ نقطه بازچینش معتبری ساخته نشد.", "No valid rebalance point was produced in this window."));
+    return emptyReport(
+      msg(
+        "در این بازه هیچ نقطه بازچینش معتبری ساخته نشد.",
+        "No valid rebalance point was produced in this window.",
+      ),
+    );
   }
 
-  const fromMs = (calendar[startIdx] ?? startDay) * 86_400_000;
-  const toMs = (calendar[calendar.length - 1] ?? startDay) * 86_400_000;
-  const endBtc = priceAt(btcMap, calendar[calendar.length - 1] ?? startDay) ?? startBtc;
-  const btcReturn = startBtc > 0 ? endBtc / startBtc - 1 : btcEquity - 1;
+  const fromMs = (calendar[startIdx] ?? calendar[0]!) * 86_400_000;
+  const toMs = (calendar[calendar.length - 1] ?? calendar[0]!) * 86_400_000;
   const eqCurve = curve.map((p) => p.equity);
   const btcCurve = curve.map((p) => p.btc);
+  const ruleCurve = curve.map((p) => p.rule);
   const holdings = [...holdDays.entries()]
     .map(([symbol, v]) => ({ symbol, periods: v.periods, returnPct: v.ret }))
     .sort((a, b) => b.periods - a.periods);
 
   const totalReturn = equity - 1;
+  const btcReturn = btcEquity - 1;
+  const baselineReturn = ruleEquity - 1;
+  const holdoutReturn = holdoutSat - 1;
+  const holdoutBaselineReturn = holdoutRule - 1;
+  const holdoutMaxDrawdown = maxDrawdown([1, ...holdoutSatCurve]);
+  const holdoutBaselineMaxDrawdown = maxDrawdown([1, ...holdoutRuleCurve]);
+  const earned = satelliteBeatBaseline({
+    holdoutWeeks,
+    holdoutReturn,
+    holdoutBaselineReturn,
+    holdoutMaxDrawdown,
+    holdoutBaselineMaxDrawdown,
+  });
   const winRate = winners / periods;
   const months = monthlyPath(curve);
   const monthStats = summarizeMonths(months);
   const avgPct = (monthStats.avg * 100).toFixed(1);
   const modelPct = (totalReturn * 100).toFixed(1);
+  const basePct = (baselineReturn * 100).toFixed(1);
   const btcPct = (btcReturn * 100).toFixed(1);
-  const faMonth = monthStats.sample === "full" ? "میانگین ماه‌های کامل مدل" : "میانگین ماه‌های مدل";
+  const holdPct = (holdoutReturn * 100).toFixed(1);
+  const holdBasePct = (holdoutBaselineReturn * 100).toFixed(1);
+  const faMonth = monthStats.sample === "full" ? "میانگین ماه‌های کامل دفتر" : "میانگین ماه‌های دفتر";
   const enMonth =
     monthStats.sample === "full"
-      ? "Mean return of the model’s complete months"
-      : "Mean monthly return of the model";
-  const note = msg(
-    totalReturn >= btcReturn
-      ? `در این مسیر، مدل از خرید و نگهداری بیت‌کوین جلوتر بود: ${modelPct}٪ در برابر ${btcPct}٪. ${faMonth} ${avgPct}٪ بود.`
-      : `در این مسیر بیت‌کوین بهتر بود: مدل ${modelPct}٪ و BTC ${btcPct}٪. ${faMonth} ${avgPct}٪ بود.`,
-    totalReturn >= btcReturn
-      ? `On this path the model beat buy-and-hold Bitcoin: ${modelPct}% versus ${btcPct}%. ${enMonth} was ${avgPct}%.`
-      : `On this path Bitcoin was better: the model ${modelPct}% and BTC ${btcPct}%. ${enMonth} was ${avgPct}%.`,
-  );
+      ? "Mean return of the book’s complete months"
+      : "Mean monthly return of the book";
+  const holdFa = holdoutWeeks
+    ? `${holdPct}٪ در برابر ${holdBasePct}٪`
+    : "آن بازه داخل این نمونه نیست";
+  const holdEn = holdoutWeeks
+    ? `${holdPct}% versus ${holdBasePct}%`
+    : "that window is not inside this sample";
+  const note = earned
+    ? msg(
+        `قمر روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط پایه را برد: ${holdFa}، و افت هم کم‌عمق‌تر بود. مسیر دفتر ${modelPct}٪ است، خط پایه ${basePct}٪، و ${faMonth} ${avgPct}٪.`,
+        `The satellite beat the baseline on the untouched window through 1 July 2023: ${holdEn}, with a shallower drop. The book path is ${modelPct}%, the baseline is ${basePct}%, and ${enMonth.toLowerCase()} was ${avgPct}%.`,
+      )
+    : msg(
+        `قمر خاموش می‌ماند. روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط «میانگین ۲۰۰ / تتر» را نبرد (${holdFa}). دفتر زنده همان خط است: بیت‌کوین، یا تتر وقتی کلید قطع روشن است. مسیر آزمایشی ${modelPct}٪، خط پایه ${basePct}٪، خرید و نگهداری بیت‌کوین ${btcPct}٪. ${faMonth} ${avgPct}٪ بود.`,
+        `The satellite stays off. On the untouched window through 1 July 2023 it did not beat the 200-day / tether line (${holdEn}). The live book is that line: Bitcoin, or tether when the kill switch is on. The measured path was ${modelPct}%, the baseline ${basePct}%, and buy-and-hold Bitcoin ${btcPct}%. ${enMonth} was ${avgPct}%.`,
+      );
 
   return {
     from: new Date(fromMs).toISOString(),
@@ -390,34 +522,121 @@ export function simulateSpotBacktest(series: BtSeries[]): BacktestReport {
     worstMonth: monthStats.worst,
     positiveMonths: monthStats.positive,
     monthsAhead: monthStats.ahead,
+    baselineReturn,
+    baselineMaxDrawdown: maxDrawdown(ruleCurve),
+    holdoutWeeks,
+    holdoutReturn,
+    holdoutBaselineReturn,
+    holdoutMaxDrawdown,
+    holdoutBaselineMaxDrawdown,
+    satelliteEarned: earned,
+    dominanceWeeks,
     assumptions: [
       msg(
-        "بازچینش هفتگی روی همان امتیاز اسپات (قدرت نسبی، روند، ورود، ریسک) فقط با داده‌ای که تا همان روز وجود داشته.",
-        "Weekly rebalance uses the same spot score (relative strength, trend, entry, risk) and only data that existed through that day.",
+        "هر هفته دفتر اجرا می‌شود، نه انتخابِ امتیاز. کلید قطع (زیر میانگین ۲۰۰روزه و ساختار هفتگی شکسته) صددرصد تتر است. وگرنه هسته بیت‌کوین است.",
+        "Each week runs the book, not a score pick. The kill switch (under the 200-day average and weekly structure broken) is one hundred percent tether. Otherwise the core is Bitcoin.",
       ),
       msg(
-        "توکنومیکس و روایت ثابت‌اند؛ تاریخچه واقعی MC/FDV و آنلاک در این بک‌تست نیست.",
-        "Tokenomics and narrative are held fixed; this backtest has no real MC/FDV or unlock history.",
+        "خط پایه همان قاعدهٔ یک‌خطی است: بالای میانگین ۲۰۰روزه بیت‌کوین، و با کلید قطع تتر. قمر فقط در مسیر آزمایشی باز می‌شود تا معلوم شود آن خط را می‌برد یا نه.",
+        "The baseline is the one-line rule: Bitcoin above the 200-day average, and tether on the kill switch. The satellite opens only on the measured path, to see whether it beats that line.",
       ),
       msg(
-        "اگر کلید قطع معلق باشد نگهداری بیت‌کوین است؛ در ریسک بالا نیمی از بازده آلت و نیمی بیت‌کوین.",
-        "If the kill-switch is suspended, the hold is Bitcoin; in high risk, half the return is the alt and half is Bitcoin.",
+        "قمر حداکثر دو نام و روی هم ۳۲٪ است. دروازه‌اش افت دامیننس در حدود سی روز، ساختار جفت، وتوی حجم و گردش و کلیف و صرافی، و محدودهٔ فرصت است. قدرت نسبی خود بیت‌کوین صفر است.",
+        "A satellite is at most two names and 32% together. Its gates are a dominance drop over about thirty days, pair structure, and the volume, float, cliff, and venue vetoes, plus the opportunity zone. Bitcoin’s own relative strength is zero.",
       ),
       msg(
-        `هزینه جابه‌جایی ${COST_BPS} نقطه پایه. اسلیپیج دفتر سفارش تاریخی در داده عمومی نیست.`,
-        `Turnover cost is ${COST_BPS} basis points. Historical order-book slippage is not in the public data.`,
+        "قمر فقط اگر روی هفته‌های تا ۱ ژوئیه ۲۰۲۳، هم بازده و هم عمق افت را بهتر از خط پایه کند، روشن حساب می‌شود. وگرنه خاموش ماندنش نتیجهٔ همین حساب است.",
+        "The satellite counts as earned only if, on the weeks through 1 July 2023, it beats the baseline on both return and drawdown. Otherwise staying off is the result of this accounting.",
       ),
       msg(
-        "جهان تست، ارزهای نقد شونده با تاریخچه بلند بایننس است نه هر صد ارز امروز — سوگیری بقا دارد.",
-        "The test universe is liquid names with a long Binance history, not today’s top 100 — it has survivorship bias.",
+        `هزینه به اندازهٔ جابه‌جایی واقعی است، ${COST_BPS} نقطه پایه. اسلیپیج دفتر سفارش تاریخی در داده عمومی نیست. توکنومیکس و روایت وزن ندارند.`,
+        `Cost is charged on real turnover, ${COST_BPS} basis points. Historical order-book slippage is not in the public data. Tokenomics and narrative have no weight.`,
       ),
       msg(
-        "بازده ماهانه از آخر هر ماه تا آخر ماه بعد، روی همان مسیر هفتگی و بعد از هزینه جابه‌جایی است. هفته به ماهی می‌رود که در آن تمام شده. این بک‌تست مدل انتخاب میز اصلی است، نه حکم‌های قفل‌شده میز بیت‌کوین. ماهی با کمتر از سه هفته «ناقص» است و اگر سه ماه کامل باشد از میانگین کنار گذاشته می‌شود.",
-        "Monthly return runs from one month-end to the next on the same weekly path, after turnover cost. A week is booked in the month it ends. This backtest is the main desk’s pick model, not the Bitcoin desk’s locked calls. A month with fewer than three weeks is partial, and is left out of the average once three complete months exist.",
+        "جهان تست، ارزهای نقدشونده با تاریخچه بلند بایننس است نه هر صد ارز امروز — سوگیری بقا دارد. اگر سری دامیننس نرسد، دروازهٔ قمر بسته می‌ماند.",
+        "The test universe is liquid names with a long Binance history, not today’s top 100 — it has survivorship bias. If the dominance series is missing, the satellite gate stays shut.",
+      ),
+      msg(
+        "بازده ماهانه از آخر هر ماه تا آخر ماه بعد، روی همان مسیر هفتگی و بعد از هزینه است. ماهی با کمتر از سه هفته «ناقص» است و اگر سه ماه کامل باشد از میانگین کنار گذاشته می‌شود.",
+        "Monthly return runs from one month-end to the next on the same weekly path, after cost. A month with fewer than three weeks is partial, and is left out of the average once three complete months exist.",
       ),
     ],
     note,
   };
+}
+
+function cashOnKill(status: string): Map<string, number> {
+  if (status === "SUSPENDED") return new Map([["USDT", 1]]);
+  return new Map([["BTC", 1]]);
+}
+
+function sleeveWeights(book: {
+  mode: string;
+  cashWeight: number;
+  coreWeight: number;
+  campaigns: { sleeve: string; status: string; symbol: string; weight: number }[];
+}): Map<string, number> {
+  if (book.mode === "cash" || book.cashWeight >= 0.999) return new Map([["USDT", 1]]);
+  const weights = new Map<string, number>();
+  if (book.coreWeight > 0) weights.set("BTC", book.coreWeight);
+  for (const campaign of book.campaigns) {
+    if (campaign.sleeve === "satellite" && campaign.status === "open" && campaign.weight > 0) {
+      weights.set(campaign.symbol, (weights.get(campaign.symbol) ?? 0) + campaign.weight);
+    }
+  }
+  const sum = [...weights.values()].reduce((total, value) => total + value, 0);
+  if (!(sum > 0)) return new Map([["BTC", 1]]);
+  if (Math.abs(sum - 1) > 1e-8) {
+    for (const [key, value] of weights) weights.set(key, value / sum);
+  }
+  return weights;
+}
+
+function turnoverOf(prev: Map<string, number>, next: Map<string, number>): number {
+  const keys = new Set([...prev.keys(), ...next.keys()]);
+  let distance = 0;
+  for (const key of keys) distance += Math.abs((next.get(key) ?? 0) - (prev.get(key) ?? 0));
+  return distance / 2;
+}
+
+function portReturn(
+  weights: Map<string, number>,
+  day: number,
+  nextDay: number,
+  maps: Map<string, Map<number, BtBar>>,
+): number | null {
+  let ret = 0;
+  for (const [symbol, weight] of weights) {
+    if (!(weight > 0) || symbol === "USDT") continue;
+    const map = maps.get(symbol);
+    const p0 = map ? priceAt(map, day) : null;
+    const p1 = map ? priceAt(map, nextDay) : null;
+    if (!p0 || !p1) return null;
+    ret += weight * (p1 / p0 - 1);
+  }
+  return ret;
+}
+
+function barsUntil(map: Map<number, BtBar>, calendar: number[], endIdx: number): SpotBar[] {
+  const start = Math.max(0, endIdx - 259);
+  const out: SpotBar[] = [];
+  for (let i = start; i <= endIdx; i++) {
+    const day = calendar[i];
+    if (day == null) continue;
+    const bar = map.get(day);
+    if (!bar || !(bar.c > 0)) continue;
+    const c = bar.c;
+    out.push({
+      t: day * 86_400_000,
+      o: bar.o && bar.o > 0 ? bar.o : c,
+      h: bar.h && bar.h > 0 ? bar.h : c,
+      l: bar.l && bar.l > 0 ? bar.l : c,
+      c,
+      v: bar.q > 0 ? bar.q : 0,
+      q: bar.q > 0 ? bar.q : 0,
+    });
+  }
+  return out;
 }
 
 function monthKey(ms: number): string {
@@ -547,6 +766,15 @@ function emptyReport(note: string): BacktestReport {
     worstMonth: 0,
     positiveMonths: 0,
     monthsAhead: 0,
+    baselineReturn: 0,
+    baselineMaxDrawdown: 0,
+    holdoutWeeks: 0,
+    holdoutReturn: 0,
+    holdoutBaselineReturn: 0,
+    holdoutMaxDrawdown: 0,
+    holdoutBaselineMaxDrawdown: 0,
+    satelliteEarned: false,
+    dominanceWeeks: 0,
     assumptions: [],
     note,
   };
