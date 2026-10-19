@@ -44,24 +44,25 @@ function along(parts: readonly string[], faSep: string, enSep = faSep): string {
   return msg(fa.join(faSep), en.join(enSep));
 }
 
+/** Time-varying factors only. Tokenomics and narrative are vetoes, not weights. The old weights were renormalized, not refit. */
 export const FACTOR_WEIGHTS: Record<FactorKey, number> = {
-  rs: 0.22,
-  tokenomics: 0.16,
-  entry: 0.16,
-  trend: 0.16,
-  liquidity: 0.14,
-  risk: 0.1,
-  narrative: 0.06,
+  rs: 22 / 78,
+  tokenomics: 0,
+  entry: 16 / 78,
+  trend: 16 / 78,
+  liquidity: 14 / 78,
+  risk: 10 / 78,
+  narrative: 0,
 };
 
 export const FACTOR_LABELS: Record<FactorKey, string> = {
   rs: msg("قدرت نسبی به بیت‌کوین", "Relative strength vs Bitcoin"),
-  tokenomics: msg("توکنومیکس · MC/FDV", "Tokenomics · MC/FDV"),
+  tokenomics: msg("وتو · گردش و آنلاک", "Veto · float and unlocks"),
   entry: msg("موقعیت ورود", "Entry location"),
   trend: msg("روند کلان", "Macro trend"),
   liquidity: msg("نقدشوندگی اسپات", "Spot liquidity"),
   risk: msg("بازده به ریسک", "Return versus risk"),
-  narrative: msg("روایت و ارزش‌افزایی", "Narrative and value accrual"),
+  narrative: msg("وتو نیست · روایت وزن ندارد", "Not a weight · narrative is off"),
 };
 
 export function factorWeightSum(): number {
@@ -345,6 +346,7 @@ export function scoreUniverse(
     kill?: BtcKillSwitch;
   },
 ): CoinRow[] {
+  void regime;
   const rsBlend = drafts.map((d) => blendRs(d));
   const sharpe = drafts.map((d) => sharpeLike(d));
   const vols = drafts.map((d) => d.volume24h);
@@ -364,36 +366,32 @@ export function scoreUniverse(
     let score = factors.reduce((s, f) => s + f.score * f.weight, 0);
 
     const unlock = ctx?.unlocks?.get(d.symbol) ?? emptyUnlock();
-    if (d.symbol !== "BTC" && unlock.penalty > 0) {
-      score -= unlock.penalty;
-      const tok = factors.find((f) => f.key === "tokenomics");
-      if (tok) {
-        tok.note = along(
-          [
-            tok.note,
-            msg(
-              ` جریمه کلیف/رقیق‌سازی: ${unlock.penalty} امتیاز از نمره کل کسر شد. ${unlock.note}`,
-              ` Cliff/dilution penalty: ${unlock.penalty} points were deducted from the total score. ${unlock.note}`,
-            ),
-          ],
-          "",
-        );
-      }
+    const tok = factors.find((f) => f.key === "tokenomics");
+    if (tok) {
+      tok.note = along(
+        [
+          msg(
+            "توکنومیکس وزن ندارد. گردش خیلی کم، کلیف، حجم زیر حد، یا نبودن در صرافی نام را حذف می‌کند.",
+            "Tokenomics has no weight. Very low float, a cliff, volume under the floor, or a missing exchange listing removes the name.",
+          ),
+          tok.note,
+        ],
+        " ",
+      );
     }
-
-    if (d.symbol === "BTC") {
-      if (regime === "btc") score += 6;
-      if (regime === "alt") score -= 4;
-    } else if (regime === "btc" && (d.rs7d ?? 0) < 0) {
-      score -= 3;
+    const narrative = factors.find((f) => f.key === "narrative");
+    if (narrative) {
+      narrative.note = along(
+        [
+          msg(
+            "روایت در رتبه شرکت نمی‌کند.",
+            "Narrative does not take part in the rank.",
+          ),
+          narrative.note,
+        ],
+        " ",
+      );
     }
-
-    if (d.volume24h < 8_000_000) score -= 8;
-    if (!d.hasKlines) score -= 4;
-    if (d.mcFdv != null && d.mcFdv < 0.5 && d.symbol !== "BTC" && d.symbol !== "ETH") {
-      score -= 5;
-    }
-    if (d.aboveEma200 === false && d.weeklyStructure === "bear") score -= 4;
 
     const kill = ctx?.kill;
     let buySignal: BuySignal = "open";
@@ -401,9 +399,6 @@ export function scoreUniverse(
     if (d.symbol !== "BTC" && kill && kill.status === "SUSPENDED") {
       buySignal = "suspended";
       sizeMultiplier = 0;
-    } else if (d.symbol !== "BTC" && kill && kill.status === "HIGH_RISK") {
-      buySignal = "reduced";
-      sizeMultiplier = 0.5;
     }
 
     const { pairCloses: _p, usdCloses: _u, usdVolumes: _v, ...rest } = d;
@@ -755,60 +750,26 @@ function scoreNarrative(d: CoinDraft): FactorScore {
 }
 
 export function passesSpotGate(r: CoinRow): boolean {
+  if (r.symbol === "BTC") return true;
   if (r.buySignal === "suspended") return false;
   if (r.volume24h < 8_000_000) return false;
-  if (r.rank > 100) return false;
-  if (r.symbol !== "BTC" && r.mcFdv != null && r.mcFdv < 0.32) return false;
-  if (r.symbol !== "BTC" && r.distFrom30dHighPct != null && r.distFrom30dHighPct > -0.03) {
-    return false;
-  }
-  const extendedPump =
-    r.rs7d > 0.18 &&
-    (r.rsi14 == null || r.rsi14 > 60) &&
-    (r.distFrom30dHighPct == null || r.distFrom30dHighPct > -0.1);
-  if (extendedPump) return false;
+  if (r.symbol !== "BTC" && r.mcFdv != null && r.mcFdv < 0.35) return false;
+  if (r.unlockCliff || r.highDilution) return false;
+  if (!r.hasBtcPair) return false;
   return true;
 }
 
 export function pickWinner(
   ranked: CoinRow[],
-  regime: Regime,
-  kill?: BtcKillSwitch,
+  _regime: Regime,
+  _kill?: BtcKillSwitch,
 ): { pick: CoinRow | null; runnerUp: CoinRow | null; refused: boolean; viaSeasonRule: boolean } {
-  if (kill?.status === "SUSPENDED") {
-    return { pick: null, runnerUp: null, refused: true, viaSeasonRule: false };
-  }
   const eligible = ranked.filter(passesSpotGate);
   if (!eligible.length) {
     return { pick: null, runnerUp: null, refused: true, viaSeasonRule: false };
   }
   const sorted = [...eligible].sort((a, b) => b.score - a.score);
-  let pick = sorted[0];
-  const btc = ranked.find((r) => r.symbol === "BTC");
-  let seasonForced = false;
-
-  if (pick && btc && pick.symbol !== "BTC" && regime === "btc") {
-    if (pick.score - btc.score < 3.5) {
-      pick = btc;
-      seasonForced = true;
-    }
-  }
-
-  if (pick && pick.rsi14 != null && pick.rsi14 > 78) {
-    const alt = sorted.find(
-      (r) => r.symbol !== pick!.symbol && (r.rsi14 == null || r.rsi14 < 72),
-    );
-    if (alt && pick.score - alt.score < 8) pick = alt;
-  }
-
-  if (pick?.highDilution) {
-    const cleaner = sorted.find(
-      (r) => r.symbol !== pick!.symbol && !r.highDilution && pick!.score - r.score < 8,
-    );
-    if (cleaner) pick = cleaner;
-  }
-
-  const viaSeasonRule = seasonForced && pick?.symbol === "BTC";
+  const pick = sorted[0] ?? null;
   const runnerUp = sorted.find((r) => r.symbol !== pick?.symbol) ?? null;
-  return { pick: pick ?? null, runnerUp, refused: false, viaSeasonRule };
+  return { pick, runnerUp, refused: false, viaSeasonRule: false };
 }

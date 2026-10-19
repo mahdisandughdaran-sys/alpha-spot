@@ -7,29 +7,16 @@ import type {
   RebalancePlan,
   BtcKillSwitch,
 } from "./types.ts";
+import { bookMode } from "./book.ts";
 import { msg } from "@/lib/i18n/lex";
-
-const EXIT_SCORE = 60;
-const QUALIFIED_SCORE = 68;
 
 function findCoin(coins: CoinRow[], symbol: string): CoinRow | undefined {
   const key = symbol.toUpperCase();
   return coins.find((c) => c.symbol === key);
 }
 
-function qualifiedTargets(coins: CoinRow[], except: string): CoinRow[] {
-  return coins
-    .filter(
-      (c) =>
-        c.symbol !== except &&
-        c.symbol !== "BTC" &&
-        c.score >= QUALIFIED_SCORE &&
-        !c.highDilution &&
-        c.buySignal === "open" &&
-        c.volume24h >= 8_000_000 &&
-        c.rank <= 100,
-    )
-    .sort((a, b) => b.score - a.score);
+function sentence(fa: string, en: string): string {
+  return msg(fa, en);
 }
 
 export function advisePosition(
@@ -41,125 +28,102 @@ export function advisePosition(
   const coin = findCoin(coins, symbol);
   const btc = findCoin(coins, "BTC");
   const entry = holding.entryUsd;
-  const pnlPct =
-    coin && entry > 0 ? coin.priceUsd / entry - 1 : null;
+  const price = coin?.priceUsd ?? null;
+  const pnlPct = coin && entry > 0 ? coin.priceUsd / entry - 1 : null;
   const size = Math.max(holding.sizeUsd, 0);
+  const mode = bookMode(kill);
+  const underwater = pnlPct != null && pnlPct < 0;
 
   const base = {
     symbol,
     name: coin?.name ?? symbol,
     score: coin?.score ?? null,
-    priceUsd: coin?.priceUsd ?? null,
+    priceUsd: price,
     pnlPct,
     pairSupportBroken: Boolean(coin && coin.symbol !== "BTC" && coin.pairSupportBroken),
     pairWeekly: coin?.pairWeekly ?? null,
     highDilution: coin?.highDilution ?? false,
   };
 
-  if (!coin) {
-    return {
-      ...base,
-      action: "HOLD",
-      reason: msg(
-        "این نماد در صد ارز اول اسکن‌شده نیست؛ بدون داده جفت BTC سیگنال خروج صادر نمی‌شود.",
-        "This ticker is not in the top 100 scanned; without BTC-pair data, no exit signal is issued.",
-      ),
-      targetSymbol: null,
-      targetName: null,
-      suggestedSizeUsd: size,
-    };
-  }
+  const hold = (reason: string, suggested = size): PositionAdvice => ({
+    ...base,
+    action: "HOLD",
+    reason,
+    targetSymbol: null,
+    targetName: null,
+    suggestedSizeUsd: underwater ? Math.min(suggested, size) : suggested,
+  });
 
-  const broken = coin.symbol !== "BTC" && coin.pairSupportBroken;
-  const weakScore = coin.score < EXIT_SCORE;
-  const targets = qualifiedTargets(coins, coin.symbol);
-
-  const rotateTo = (action: DeskAction, reason: string, suggested: number, dest: CoinRow | null) => ({
+  const exitTo = (
+    action: DeskAction,
+    reason: string,
+    dest: { symbol: string; name: string } | null,
+  ): PositionAdvice => ({
     ...base,
     action,
     reason,
     targetSymbol: dest?.symbol ?? null,
     targetName: dest?.name ?? null,
-    suggestedSizeUsd: suggested,
+    suggestedSizeUsd: 0,
   });
 
-  if (kill.status === "SUSPENDED" && coin.symbol !== "BTC") {
-    return rotateTo(
-      "REBALANCE",
-      msg(
-        "کلید قطع بیت‌کوین فعال است؛ خرید اسپات معلق است و سرمایه باید به سمت بیت‌کوین بچرخد.",
-        "The Bitcoin kill-switch is on; spot buys are suspended and capital should rotate toward Bitcoin.",
+  if (!coin && symbol !== "USDT") {
+    return hold(
+      sentence(
+        "این نماد در صد ارز اول اسکن‌شده نیست. بدون داده، به بازنده اضافه نمی‌شود و به خاطر امتیاز هم فروخته نمی‌شود.",
+        "This ticker is not in the top 100 scanned. Without data it is not averaged down, and it is not sold because of a score.",
       ),
-      size,
-      btc ?? null,
     );
   }
 
-  if (broken || weakScore) {
-    const dest =
-      kill.status === "HIGH_RISK"
-        ? (btc ?? targets[0] ?? null)
-        : (targets[0] ?? btc ?? null);
-    const whyFa = broken
-      ? "حمایت هفتگی ALT/BTC شکست؛ قدرت نسبی در برابر بیت‌کوین از دست رفته است."
-      : `امتیاز مدل ${coin.score.toFixed(1)} زیر حد نصاب ${EXIT_SCORE} است.`;
-    const whyEn = broken
-      ? "Weekly ALT/BTC support broke; relative strength versus Bitcoin is lost."
-      : `Model score ${coin.score.toFixed(1)} is below the ${EXIT_SCORE} floor.`;
-    if (dest && dest.symbol !== coin.symbol) {
-      return rotateTo(
-        "REBALANCE",
-        msg(`${whyFa} پیشنهاد چرخش به ${dest.symbol}.`, `${whyEn} Suggest rotating into ${dest.symbol}.`),
-        size,
-        dest,
-      );
-    }
-    return rotateTo(
+  if (mode === "cash") {
+    return exitTo(
       "SELL",
-      msg(
-        `${whyFa} مقصد واجد شرایطی برای چرخش نماند؛ خروج پیشنهاد می‌شود.`,
-        `${whyEn} No qualified destination is left for a rotation; an exit is suggested.`,
+      sentence(
+        "کلید قطع روشن است. کمپین بسته می‌شود و مقصد تتر است، نه آلت بعدی.",
+        "The kill switch is on. The campaign closes and the destination is tether, not the next alt.",
       ),
-      0,
       null,
     );
   }
 
-  if (kill.status === "HIGH_RISK" && coin.symbol !== "BTC") {
-    return rotateTo(
-      "HOLD",
-      msg(
-        "تز ورود هنوز سالم است، اما ریسک کلان بالا است و حجم پیشنهادی همین پوزیشن نصف می‌شود.",
-        "The entry thesis is still intact, but macro risk is high and the suggested size of this position is halved.",
+  if (symbol === "BTC") {
+    return hold(
+      sentence(
+        "بیت‌کوین هسته است. افت امتیاز یا RSI داغ دلیل فروش نیست. خروج فقط با کلید قطع.",
+        "Bitcoin is the core. A lower score or a hot RSI is not a sale. The exit is only the kill switch.",
       ),
-      size * 0.5,
-      null,
     );
   }
 
-  if (coin.highDilution && coin.symbol !== "BTC") {
-    const dest = targets[0] ?? btc ?? null;
-    if (dest) {
-      return rotateTo(
-        "REBALANCE",
-        msg(
-          `برچسب High Dilution Risk فعال است (${coin.unlockPenalty} امتیاز جریمه). چرخش به گزینه تمیزتر منطقی است.`,
-          `The High Dilution Risk tag is active (${coin.unlockPenalty} point penalty). Rotating into a cleaner name makes sense.`,
-        ),
-        size,
-        dest,
-      );
+  const invalidated =
+    holding.invalidationUsd != null &&
+    price != null &&
+    price > 0 &&
+    price <= holding.invalidationUsd;
+  const structureBroke = Boolean(coin?.pairSupportBroken);
+
+  if (invalidated || structureBroke) {
+    const why = invalidated
+      ? sentence(
+          "قیمت به ابطالِ قفل‌شده در روز ورود رسید. به بازنده اضافه نکن.",
+          "Price hit the invalidation locked on the entry day. Do not add to the loser.",
+        )
+      : sentence(
+          "ساختار هفتگی جفت با بیت‌کوین شکست. این خروج است، نه چرخش به آلتی که امروز امتیازش بالاتر است.",
+          "Weekly structure of the Bitcoin pair broke. This is an exit, not a rotation into whichever alt scores higher today.",
+        );
+    if (mode === "core" && btc) {
+      return exitTo("REBALANCE", why, { symbol: btc.symbol, name: btc.name });
     }
+    return exitTo("SELL", why, null);
   }
 
-  return rotateTo(
-    "HOLD",
-    msg(
-      "امتیاز بالای حد نصاب است و حمایت هفتگی ALT/BTC نشکسته. نگهداری.",
-      "The score is above the floor and weekly ALT/BTC support is intact. Hold.",
+  return hold(
+    sentence(
+      "کمپین باز است. جابه‌جایی امتیاز فردا دلیل فروش نیست و حجم روی ضرر بیشتر نمی‌شود.",
+      "The campaign is open. Tomorrow’s score moving is not a sale, and size does not increase on a loss.",
     ),
-    size,
-    null,
   );
 }
 
@@ -178,18 +142,14 @@ export function buildRebalancePlan(
     const held = holdings.find((h) => h.symbol.toUpperCase() === row.symbol);
     const size = held?.sizeUsd ?? 0;
     if (row.action === "HOLD") {
-      holdUsd += row.suggestedSizeUsd;
+      holdUsd += size;
       continue;
     }
-    if (row.action === "SELL") {
+    if (row.action === "SELL" || !row.targetSymbol) {
       sellUsd += size;
       continue;
     }
     rotateUsd += size;
-    if (!row.targetSymbol) {
-      sellUsd += size;
-      continue;
-    }
     const prev = bucket.get(row.targetSymbol);
     const coin = findCoin(coins, row.targetSymbol);
     if (prev) prev.usd += size;
@@ -199,36 +159,29 @@ export function buildRebalancePlan(
         name: row.targetName ?? row.targetSymbol,
         score: coin?.score ?? 0,
         usd: size,
-        reason:
-          row.targetSymbol === "BTC"
-            ? msg("پناهگاه وقتی کلید قطع یا قدرت نسبی می‌شکند", "A shelter when the kill-switch or relative strength breaks")
-            : msg(
-                "برترین گزینه واجد شرایط با امتیاز بالای ۶۸ و بدون جریمه رقیق‌سازی",
-                "The top qualified name, scored above 68, with no dilution penalty",
-              ),
+        reason: sentence(
+          "برگشت به هسته بعد از ابطال کمپین. مقصد، آلتِ رتبهٔ بعد نیست.",
+          "Back to the core after the campaign was invalidated. The destination is not the next-ranked alt.",
+        ),
       });
     }
   }
 
   const destinations = [...bucket.values()].sort((a, b) => b.usd - a.usd);
-  let note = msg(
-    "پایش روی پوزیشن‌های همین مرورگر است و سفارش واقعی ارسال نمی‌کند.",
-    "This watch covers positions in this browser only and does not send a live order.",
+  const mode = bookMode(kill);
+  let note = sentence(
+    "پایش همین مرورگر است و سفارش نمی‌فرستد. خروج فقط با ابطال قفل‌شده، شکست ساختار هفتگی جفت، یا کلید قطع.",
+    "This watch lives in this browser and sends no order. An exit happens only on the locked invalidation, a weekly pair-structure break, or the kill switch.",
   );
-  if (kill.status === "SUSPENDED") {
-    note = msg(
-      "کلید قطع فعال است؛ آلت‌های داخل سبد پیشنهاد چرخش به بیت‌کوین دارند.",
-      "The kill-switch is on; alts in the book are flagged to rotate into Bitcoin.",
+  if (mode === "cash") {
+    note = sentence(
+      "کلید قطع روشن است. آلت و بیت‌کوین هر دو به تتر پیشنهاد می‌شوند.",
+      "The kill switch is on. Both alts and Bitcoin are flagged for tether.",
     );
   } else if (rotateUsd > 0) {
-    note = msg(
-      "سرمایه ضعیف‌شده برای چرخش به مقصدهای واجد شرایط نشانه‌گذاری شد.",
-      "Weakened capital was flagged to rotate into qualified destinations.",
-    );
-  } else if (kill.status === "HIGH_RISK") {
-    note = msg(
-      "ریسک کلان بالا است؛ پوزیشن‌های سالم با نصف حجم پیشنهادی نگه داشته می‌شوند.",
-      "Macro risk is high; healthy positions are kept at half the suggested size.",
+    note = sentence(
+      "کمپینِ باطل‌شده به هستهٔ بیت‌کوین برمی‌گردد. امتیاز پایین‌تر چرخش نمی‌سازد.",
+      "An invalidated campaign returns to the Bitcoin core. A lower score does not rotate the book.",
     );
   }
 

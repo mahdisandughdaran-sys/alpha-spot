@@ -1,7 +1,8 @@
 import { lookupMeta } from "./catalog.ts";
+import { bookMode, campaignInvalidation, dominanceIsFalling, RISK_FRACTION, SATELLITE_CAP, VOLUME_FLOOR } from "./book.ts";
 import { evaluateKillSwitch } from "./kill-switch.ts";
 import { maxDrawdown } from "./math.ts";
-import { detectRegime, enrichFromKlines, pickWinner, scoreUniverse } from "./scoring.ts";
+import { enrichFromKlines } from "./scoring.ts";
 import type { CoinDraft } from "./types.ts";
 import { msg } from "@/lib/i18n/lex";
 
@@ -25,6 +26,8 @@ export type BacktestPoint = {
   t: number;
   equity: number;
   btc: number;
+  /** The one-line rule: above the 200-day average, Bitcoin; below it with broken structure, tether. */
+  rule: number;
 };
 
 export type BacktestHolding = {
@@ -67,6 +70,18 @@ export type BacktestReport = {
   worstMonth: number;
   positiveMonths: number;
   monthsAhead: number;
+  /** One-line rule over the same weeks, after the same costs. */
+  baselineReturn: number;
+  baselineMaxDrawdown: number;
+  /** Window the previous 1,200-bar sample never saw: up to 1 July 2023, including 2022. */
+  holdoutWeeks: number;
+  holdoutReturn: number;
+  holdoutBaselineReturn: number;
+  holdoutMaxDrawdown: number;
+  holdoutBaselineMaxDrawdown: number;
+  /** True only if the satellite sleeve beat the one-line rule on the holdout, in return and in drawdown. */
+  satelliteEarned: boolean;
+  dominanceWeeks: number;
   assumptions: string[];
   note: string;
 };
@@ -93,7 +108,7 @@ function draftAt(input: {
   const lastPair = input.pair[input.pair.length - 1] ?? 0;
   const volume24h = Math.max(input.quote, 0);
   const turnover = 0.025;
-  return enrichFromKlines({
+  const enriched = enrichFromKlines({
     id: input.symbol.toLowerCase(),
     symbol: input.symbol,
     name: input.name,
@@ -130,7 +145,7 @@ function draftAt(input: {
     turnover,
     circulatingSupply: null,
     maxSupply: null,
-    mcFdv: input.symbol === "BTC" || input.symbol === "ETH" ? 1 : 0.85,
+    mcFdv: input.symbol === "BTC" || input.symbol === "ETH" ? 1 : null,
     narrativeTags: meta.tags,
     narrativeTagsFa: meta.tagsFa,
     accrual: meta.accrual,
@@ -141,6 +156,10 @@ function draftAt(input: {
     usdCloses: input.usd,
     usdVolumes: input.vols,
   });
+  if (input.symbol === "BTC") {
+    return { ...enriched, rs24h: 0, rs7d: 0, rs14d: 0, rs30d: 0 };
+  }
+  return enriched;
 }
 
 type Aligned = { closes: number[]; vols: number[] };

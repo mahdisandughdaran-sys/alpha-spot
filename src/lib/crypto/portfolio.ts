@@ -1,162 +1,142 @@
-import { msg } from "@/lib/i18n/lex";
+import { decideBook, type SpotBook } from "./book.ts";
 import type { BtcKillSwitch, CoinRow, Regime, Sleeve, SleeveLeg } from "./types.ts";
+import type { Opportunity } from "./opportunity.ts";
 
-function splitByScore(rows: CoinRow[], totalWeight: number, maxN: number): SleeveLeg[] {
-  const picks = rows.slice(0, maxN);
-  if (picks.length === 0) return [];
-  const scores = picks.map((r) => Math.max(r.score, 1));
-  const sum = scores.reduce((a, b) => a + b, 0);
-  return picks.map((r, i) => ({
-    symbol: r.symbol,
-    name: r.name,
-    rank: r.rank,
-    weight: totalWeight * ((scores[i] ?? 1) / sum),
-    score: r.score,
-    reason:
-      r.rank <= 50
-        ? "لارج‌کپ با امتیاز مدل بالا"
-        : r.narrativeTagsFa[0]
-          ? `میدکپ · ${r.narrativeTagsFa[0]}`
-          : "میدکپ با پتانسیل بالاتر",
-  }));
+function legFrom(input: {
+  symbol: string;
+  name: string;
+  weight: number;
+  score: number;
+  rank: number;
+  reason: string;
+}): SleeveLeg {
+  return {
+    symbol: input.symbol,
+    name: input.name,
+    rank: input.rank,
+    weight: input.weight,
+    score: input.score,
+    reason: input.reason,
+  };
 }
 
-export function buildPortfolio(
-  ranked: CoinRow[],
-  regime: Regime,
-  kill?: BtcKillSwitch,
-): Sleeve[] {
-  const btc = ranked.find((r) => r.symbol === "BTC");
-  const eth = ranked.find((r) => r.symbol === "ETH");
-
-  const corePct = 0.55;
-  const btcShare =
-    regime === "btc" ? 0.4 : regime === "alt" ? 0.3 : 0.35;
-  const ethShare = corePct - btcShare;
+export function portfolioFromBook(book: SpotBook, ranked: CoinRow[]): Sleeve[] {
+  const find = (symbol: string) => ranked.find((row) => row.symbol === symbol);
+  const btc = find("BTC");
+  const core = book.campaigns.find((row) => row.sleeve === "core" && row.weight > 0);
+  const satellites = book.campaigns.filter((row) => row.sleeve === "satellite" && row.status === "open");
+  const cash = book.campaigns.find((row) => row.sleeve === "cash" && row.weight > 0);
 
   const coreLegs: SleeveLeg[] = [];
-  if (btc) {
-    coreLegs.push({
-      symbol: btc.symbol,
-      name: btc.name,
-      rank: btc.rank,
-      weight: eth ? btcShare : corePct,
-      score: btc.score,
-      reason: "هسته پایدار پرتفوی اسپات",
-    });
-  }
-  if (eth) {
-    coreLegs.push({
-      symbol: eth.symbol,
-      name: eth.name,
-      rank: eth.rank,
-      weight: btc ? ethShare : corePct,
-      score: eth.score,
-      reason: "لایه یک با ارزش‌افزایی واقعی",
-    });
+  if (core && core.weight > 0) {
+    coreLegs.push(
+      legFrom({
+        symbol: "BTC",
+        name: btc?.name ?? "Bitcoin",
+        weight: core.weight,
+        score: btc?.score ?? 0,
+        rank: btc?.rank ?? 1,
+        reason: core.reason,
+      }),
+    );
   }
 
-  const used = new Set(coreLegs.map((l) => l.symbol));
-  const liquid = ranked.filter(
-    (r) => !used.has(r.symbol) && r.volume24h >= 8_000_000,
-  );
-  const large = liquid.filter((r) => r.rank >= 3 && r.rank <= 50);
-  const mid = liquid.filter((r) => r.rank >= 51 && r.rank <= 100);
+  const satelliteLegs = satellites.map((row) => {
+    const coin = find(row.symbol);
+    return legFrom({
+      symbol: row.symbol,
+      name: row.name,
+      weight: row.weight,
+      score: coin?.score ?? 0,
+      rank: coin?.rank ?? 0,
+      reason: row.reason,
+    });
+  });
 
-  const largeLegs = splitByScore(large, 0.3, 4);
-  const midLegs = splitByScore(mid, 0.15, 3);
+  const cashLegs: SleeveLeg[] = [];
+  if (cash && cash.weight > 0) {
+    cashLegs.push(
+      legFrom({
+        symbol: "USDT",
+        name: "Tether",
+        weight: cash.weight,
+        score: 0,
+        rank: 0,
+        reason: cash.reason,
+      }),
+    );
+  }
 
-  const coreNote =
-    regime === "btc"
-      ? "رژیم بیت‌کوین: وزن هسته بیشتر روی BTC است."
-      : regime === "alt"
-        ? "چرخش آلت: ETH داخل هسته وزن بیشتری می‌گیرد."
-        : "بازار خنثی: هسته بین BTC و ETH تقسیم می‌شود.";
-
-  const sleeves: Sleeve[] = [
+  return [
     {
       key: "core",
-      title: "هسته · بیت‌کوین و اتریوم",
-      targetPct: 55,
-      note: coreNote,
+      title: "هسته · بیت‌کوین",
+      targetPct: Math.round(book.coreWeight * 100),
+      note:
+        book.mode === "cash"
+          ? "کلید قطع روشن است. هسته هم در تتر است، نه در بیت‌کوین."
+          : "هر روز بالای میانگین ۲۰۰روزه با ساختار هفتگی سالم، بخش اصلی دفتر بیت‌کوین است. نزدیکی به سقف دلیل خروج نیست.",
       legs: coreLegs,
     },
     {
       key: "large",
-      title: "لارج‌کپ · رتبه ۲۰ تا ۵۰",
-      targetPct: 30,
-      note: "آلت‌های نقدشونده با MC/FDV و روند قابل دفاع.",
-      legs: largeLegs,
+      title: "قمر · حداکثر دو نام",
+      targetPct: Math.round(book.satelliteWeight * 100),
+      note: book.satelliteEarned
+        ? "فقط وقتی هسته روشن است، دامیننس می‌افتد، جفت بالای میانگین خودش است، و وتو نخورده. روی هم کمتر از یک‌سوم."
+        : "قمر خاموش است. تا وقتی روی بازهٔ دست‌نخورده، بعد از هزینه، خط پایه را در بازده و عمق افت نبرد، امتیاز آلت دفتر را تکان نمی‌دهد.",
+      legs: satelliteLegs,
     },
     {
       key: "mid",
-      title: "میدکپ · رتبه ۵۰ تا ۱۰۰",
-      targetPct: 15,
-      note: "آستین هایپ و روایت روز؛ حجم کوچک‌تر، ریسک بالاتر.",
-      legs: midLegs,
+      title: "نقد · فقط کلید قطع",
+      targetPct: Math.round(book.cashWeight * 100),
+      note: "زیر میانگین ۲۰۰روزه و ساختار هفتگی شکسته، تنها جایی است که دفتر به تتر می‌رود. RSI داغ و کم بودن امتیاز اینجا نیستند.",
+      legs: cashLegs,
     },
   ];
+}
 
-  if (!kill || kill.status === "NORMAL") return sleeves;
-
-  if (kill.status === "SUSPENDED") {
-    const btcLeg = btc
-      ? [
-          {
-            symbol: btc.symbol,
-            name: btc.name,
-            rank: btc.rank,
-            weight: 1,
-            score: btc.score,
-            reason: "کلید قطع فعال است؛ تنها وزن باز، پناهگاه بیت‌کوین است.",
-          },
-        ]
-      : [];
-    return [
-      {
-        key: "core",
-        title: "پناهگاه · بیت‌کوین",
-        targetPct: 100,
-        note: "خرید اسپات آلت معلق شد. وزن پیشنهادی کامل به BTC برگشت.",
-        legs: btcLeg,
-      },
-      {
-        key: "large",
-        title: "لارج‌کپ · معلق",
-        targetPct: 0,
-        note: "سیگنال خرید تا رفع کلید قطع صادر نمی‌شود.",
-        legs: [],
-      },
-      {
-        key: "mid",
-        title: "میدکپ · معلق",
-        targetPct: 0,
-        note: "سیگنال خرید تا رفع کلید قطع صادر نمی‌شود.",
-        legs: [],
-      },
-    ];
-  }
-
-  let freed = 0;
-  const scaled = sleeves.map((sleeve) => ({
-    ...sleeve,
-    note: `${sleeve.note} حجم آلت‌ها به‌خاطر ریسک کلان نصف شد.`,
-    legs: sleeve.legs.map((leg) => {
-      if (leg.symbol === "BTC") return leg;
-      freed += leg.weight * 0.5;
-      return {
-        ...leg,
-        weight: leg.weight * 0.5,
-        reason: `${leg.reason} · حجم ۵۰٪`,
-      };
-    }),
-  }));
-  return scaled.map((sleeve) => ({
-    ...sleeve,
-    legs: sleeve.legs.map((leg) =>
-      leg.symbol === "BTC" ? { ...leg, weight: leg.weight + freed } : leg,
-    ),
-  }));
+export function buildPortfolio(
+  ranked: CoinRow[],
+  _regime: Regime,
+  kill?: BtcKillSwitch,
+  extra?: {
+    dominance?: number | null;
+    dominancePrev?: number | null;
+    opportunities?: Opportunity[];
+    listed?: Set<string> | null;
+    satelliteEarned?: boolean;
+    pauseSatellites?: boolean;
+  },
+): Sleeve[] {
+  const fallback = {
+    status: "NORMAL",
+    active: false,
+    aboveEma200: true,
+    ema200: null,
+    priceUsd: ranked.find((row) => row.symbol === "BTC")?.priceUsd ?? 0,
+    distanceToEma: null,
+    weeklyStructure: "bull",
+    weeklyMomentum: null,
+    severeWeekly: false,
+    weeklySupportBroken: false,
+    sizeMultiplier: 1,
+    spotBuys: "open",
+    headline: "",
+    note: "",
+  } as BtcKillSwitch;
+  const book = decideBook({
+    ranked,
+    kill: kill ?? fallback,
+    dominance: extra?.dominance ?? null,
+    dominancePrev: extra?.dominancePrev ?? null,
+    opportunities: extra?.opportunities ?? [],
+    listed: extra?.listed === undefined ? null : extra.listed,
+    satelliteEarned: extra?.satelliteEarned ?? false,
+    pauseSatellites: extra?.pauseSatellites ?? false,
+  });
+  return portfolioFromBook(book, ranked);
 }
 
 export function sleeveTotal(sleeves: Sleeve[]): number {

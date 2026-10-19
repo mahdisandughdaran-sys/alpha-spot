@@ -137,7 +137,7 @@ export type SpotVerdict = {
 
 export type HorizonCall = {
   horizon: "day" | "week" | "month";
-  kind: "buy" | "cash";
+  kind: VerdictKind;
   symbol: string | null;
   name: string | null;
   priceUsd: number | null;
@@ -287,6 +287,8 @@ export type HoldingInput = {
   symbol: string;
   entryUsd: number;
   sizeUsd: number;
+  /** Locked the day the campaign opened. A later score does not move it. */
+  invalidationUsd?: number | null;
 };
 
 export type PositionAdvice = {

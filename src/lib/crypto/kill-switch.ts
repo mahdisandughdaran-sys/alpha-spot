@@ -13,7 +13,6 @@ export function classifyMacroRisk(
 
 export function spotBuysFor(status: KillSwitchStatus): BuySignal {
   if (status === "SUSPENDED") return "suspended";
-  if (status === "HIGH_RISK") return "reduced";
   return "open";
 }
 
@@ -76,7 +75,7 @@ export function evaluateKillSwitch(input: {
   const below = aboveEma200 === false;
   const status = classifyMacroRisk(below, severeWeekly);
   const spotBuys = spotBuysFor(status);
-  const sizeMultiplier = status === "SUSPENDED" ? 0 : status === "HIGH_RISK" ? 0.5 : 1;
+  const sizeMultiplier = status === "SUSPENDED" ? 0 : 1;
 
   const emaBit =
     aboveEma200 == null
@@ -92,14 +91,23 @@ export function evaluateKillSwitch(input: {
         ? "ساختار هفتگی صعودی است"
         : "ساختار هفتگی خنثی یا نامشخص است";
 
-  let headline = "ریسک کلان نرمال";
-  let note = `${emaBit}. ${weekBit}. خرید اسپات با حجم کامل مدل مجاز است.`;
+  let headline = msg("روند بیت‌کوین سالم است", "Bitcoin’s trend is intact");
+  let note = msg(
+    `${emaBit}. ${weekBit}. هسته بیت‌کوین است. نقد فقط وقتی هر دو شرط با هم بشکنند.`,
+    `${emaBit}. ${weekBit}. The core is Bitcoin. Cash is only when both conditions break together.`,
+  );
   if (status === "SUSPENDED") {
-    headline = "کلید قطع اضطراری فعال";
-    note = `${emaBit}. ${weekBit}. هر دو شرط برقرار است؛ سیگنال خرید اسپات آلت‌کوین معلق شد و وزن پیشنهادی به بیت‌کوین برمی‌گردد.`;
+    headline = msg("کلید قطع · دفتر در تتر", "Kill switch · the book is in tether");
+    note = msg(
+      `${emaBit}. ${weekBit}. هر دو شرط برقرار است. آلت صفر است و بیت‌کوین هم به تتر می‌رود. این تنها جایی است که «هیچ‌چیز نخر» درست است.`,
+      `${emaBit}. ${weekBit}. Both conditions are on. Alts are zero and Bitcoin goes to tether too. This is the only place “buy nothing” is right.`,
+    );
   } else if (status === "HIGH_RISK") {
-    headline = "ریسک کلان بالا · حجم نصف";
-    note = `${emaBit}. ${weekBit}. کلید احتیاط فعال است و حجم پیشنهادی پوزیشن‌های اسپات ۵۰٪ کاهش یافت.`;
+    headline = msg("هسته را نگه دار · قمر بسته", "Hold the core · satellite closed");
+    note = msg(
+      `${emaBit}. ${weekBit}. فقط یکی از دو شرط خراب است. این نقد شدن نیست و حجم هسته نصف نمی‌شود. قمر تازه باز نمی‌شود.`,
+      `${emaBit}. ${weekBit}. Only one of the two conditions is broken. This is not cash and the core is not cut in half. A new satellite does not open.`,
+    );
   }
 
   return {

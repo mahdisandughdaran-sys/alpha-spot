@@ -19,14 +19,14 @@ export function validUntilFrom(issuedAt: string, horizon: Horizon): string {
 }
 
 export function callFromVerdict(verdict: SpotVerdict, horizon: Horizon, issuedAt: string): HorizonCall {
-  const buy = verdict.kind === "buy" && verdict.symbol != null;
+  const positioned = verdict.kind !== "cash" && verdict.symbol != null;
   return {
     horizon,
-    kind: buy ? "buy" : "cash",
-    symbol: buy ? verdict.symbol : null,
-    name: buy ? verdict.name : null,
-    priceUsd: buy ? verdict.priceUsd : null,
-    invalidationUsd: verdict.invalidationUsd,
+    kind: verdict.kind,
+    symbol: positioned ? verdict.symbol : null,
+    name: positioned ? verdict.name : null,
+    priceUsd: positioned ? verdict.priceUsd : null,
+    invalidationUsd: verdict.kind === "buy" ? verdict.invalidationUsd : null,
     reason: verdict.reason,
     issuedAt,
     validUntil: validUntilFrom(issuedAt, horizon),
@@ -36,12 +36,11 @@ export function callFromVerdict(verdict: SpotVerdict, horizon: Horizon, issuedAt
 }
 
 export function verdictFromCall(call: HorizonCall): SpotVerdict {
-  const buy = call.kind === "buy" && call.symbol != null;
   return {
-    kind: buy ? "buy" : "cash",
-    symbol: buy ? call.symbol : null,
-    name: buy ? call.name : null,
-    priceUsd: buy ? call.priceUsd : null,
+    kind: call.kind,
+    symbol: call.symbol,
+    name: call.name,
+    priceUsd: call.priceUsd,
     reachUsd: null,
     invalidationUsd: call.invalidationUsd,
     reason: call.reason,
@@ -66,11 +65,7 @@ export function cashCall(horizon: Horizon, issuedAt: string, reason: string): Ho
   };
 }
 
-function sameOrder(a: HorizonCall, b: HorizonCall): boolean {
-  return a.kind === b.kind && a.symbol === b.symbol;
-}
-
-/** A published call does not flip until it expires, unless a buy is invalidated. */
+/** A published satellite campaign does not flip because the score moved. The structural book does. */
 export function reconcileCall(
   stored: HorizonCall | null,
   fresh: HorizonCall,
@@ -79,9 +74,13 @@ export function reconcileCall(
 ): HorizonCall {
   if (!stored || stored.horizon !== fresh.horizon) return fresh;
   const until = Date.parse(stored.validUntil);
-  if (!Number.isFinite(until) || nowMs >= until) return fresh;
+  const open = Number.isFinite(until) && nowMs < until;
+  if (fresh.kind === "cash") return { ...fresh, held: false, dissent: null };
   if (
+    open &&
     stored.kind === "buy" &&
+    stored.symbol &&
+    stored.symbol !== "BTC" &&
     stored.invalidationUsd != null &&
     livePrice != null &&
     livePrice > 0 &&
@@ -89,38 +88,38 @@ export function reconcileCall(
   ) {
     return {
       ...fresh,
-      kind: "cash",
-      symbol: null,
-      name: null,
-      priceUsd: null,
+      kind: "stay",
+      symbol: "BTC",
+      name: "Bitcoin",
+      priceUsd: fresh.symbol === "BTC" ? fresh.priceUsd : stored.priceUsd,
       invalidationUsd: stored.invalidationUsd,
       reason: msg(
-        "هیچ ارزی نخر. حکم قبلی باطل شد چون قیمت از حد ابطال پایین‌تر رفت.",
-        "Do not buy any coin. The earlier call died because price crossed under invalidation.",
+        "کمپین آلت باطل شد چون قیمت از حد ابطال پایین‌تر رفت. هسته بیت‌کوین می‌ماند. این «هیچ‌چیز نخر» نیست.",
+        "The alt campaign died because price crossed under invalidation. The Bitcoin core stays. This is not “buy nothing”.",
       ),
       held: false,
       dissent: null,
     };
   }
-  if (sameOrder(stored, fresh)) {
+  if (open && stored.kind === "buy" && stored.symbol && stored.symbol !== "BTC") {
+    if (fresh.kind === "buy" && fresh.symbol === stored.symbol) {
+      return {
+        ...stored,
+        priceUsd: fresh.priceUsd ?? stored.priceUsd,
+        held: true,
+        dissent: null,
+      };
+    }
     return {
       ...stored,
-      priceUsd: fresh.kind === "buy" ? (fresh.priceUsd ?? stored.priceUsd) : stored.priceUsd,
       held: true,
-      dissent: null,
+      dissent: msg(
+        "امتیاز یا نام پیشنهادی جابه‌جا شد، ولی کمپین باز تا ابطال، شکست ساختار هفتگی، یا کلید قطع عوض نمی‌شود.",
+        "The score or the suggested name moved, but the open campaign does not change until invalidation, a weekly structure break, or the kill switch.",
+      ),
     };
   }
-  const dissent =
-    fresh.kind === "buy" && fresh.symbol
-      ? msg(
-          `تحلیل لحظه‌ای الان ${fresh.symbol} را می‌گوید، ولی این حکم تا پایان اعتبار عوض نمی‌شود.`,
-          `The live tape now names ${fresh.symbol}, but this call does not change before it expires.`,
-        )
-      : msg(
-          "تحلیل لحظه‌ای الان جور دیگری می‌گوید، ولی این حکم تا پایان اعتبار عوض نمی‌شود.",
-          "The live tape now disagrees, but this call does not change before it expires.",
-        );
-  return { ...stored, held: true, dissent };
+  return { ...fresh, held: false, dissent: null };
 }
 
 function canStore(): boolean {
