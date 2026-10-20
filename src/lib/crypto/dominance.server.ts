@@ -36,6 +36,7 @@ export async function loadDominanceSeries(): Promise<DominancePoint[]> {
   return memory?.points ?? [];
 }
 
+/** Experiment cache. The live book does not read this as permission to buy an alt. */
 export async function readSatelliteEarned(): Promise<boolean> {
   if (memoryEarned != null) return memoryEarned;
   const raw = await readCache(EARNED_KEY, STALE_SEC);

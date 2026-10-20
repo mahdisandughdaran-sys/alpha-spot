@@ -50,8 +50,8 @@ export function BacktestPanel() {
           <h3 className="text-base font-medium text-fg">{tr("بک‌تست سه ساله", "Three-year backtest")}</h3>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
             {tr(
-              "اگر هر هفته با همین مدل اسپات بین بیت‌کوین و آلت‌های نقدشونده جابه‌جا می‌شدید، بازده کل و بازده هر ماه چه بود. ماه ناقص (کمتر از سه هفته) در میانگین نمی‌آید، به شرطی که سه ماه کامل وجود داشته باشد. این آینده را تضمین نمی‌کند و حکم‌های قفل‌شده میز بیت‌کوین را نمی‌سنجد.",
-              "If you had rotated each week, with this same spot model, between Bitcoin and liquid alts, this is the total return and the return of each month. A partial month (fewer than three weeks) is left out of the average once three complete months exist. It does not guarantee the future, and it does not score the Bitcoin desk’s locked calls.",
+              "مسیر آزمایشی قمر را مثل میز زنده نگه می‌دارد: تا ابطالِ قفل‌شده در روز ورود، شکست ساختار هفتگی جفت، یا کلید قطع. خاموش شدن دروازهٔ همان هفته خروج نیست. گرم‌شدن ۲۲۰ روز است و سقوط مه و ژوئن ۲۰۲۲ داخل معامله نیست. این عدد اجازهٔ خرید آلت نیست.",
+              "The measured path holds a satellite the way the live desk does: until the invalidation locked on the entry day, a weekly pair-structure break, or the kill switch. The gate turning off that week is not an exit. Warmup is 220 days, so the May and June 2022 crash is not in the traded path. This number is not permission to buy an alt.",
             )}
           </p>
         </div>

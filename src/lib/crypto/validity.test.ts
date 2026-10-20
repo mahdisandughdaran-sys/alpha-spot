@@ -37,21 +37,21 @@ test("a day call is replaced after 24 hours", () => {
   assert.equal(next.held, false);
 });
 
-test("a buy dies early when price crosses invalidation, and the order is buy nothing", () => {
+test("a buy dies early when price crosses invalidation, and the core stays", () => {
   const stored = call({ horizon: "month", kind: "buy", invalidationUsd: 9 });
   const fresh = call({ horizon: "month", kind: "buy", symbol: "LINK" });
   const now = Date.parse("2026-10-10T00:00:00.000Z");
   const next = reconcileCall(stored, fresh, now, 8.5);
-  assert.equal(next.kind, "cash");
-  assert.equal(next.symbol, null);
-  assert.match(next.reason, /هیچ ارزی نخر/);
+  assert.equal(next.kind, "stay");
+  assert.equal(next.symbol, "BTC");
+  assert.match(next.reason, /هسته بیت‌کوین/);
 });
 
-test("cash stays cash for the month even if the live tape wants a buy", () => {
+test("a stored cash call does not outlive a book that has left cash", () => {
   const stored = call({ horizon: "month", kind: "cash", symbol: null, invalidationUsd: null });
   const fresh = call({ horizon: "month", kind: "buy" });
   const now = Date.parse("2026-10-20T00:00:00.000Z");
   const next = reconcileCall(stored, fresh, now, 10);
-  assert.equal(next.kind, "cash");
-  assert.equal(next.held, true);
+  assert.equal(next.kind, "buy");
+  assert.equal(next.held, false);
 });

@@ -88,7 +88,8 @@ test("stables and wrapped names are excluded", () => {
 
 test("factor weights sum to 1", () => {
   assert.ok(Math.abs(factorWeightSum() - 1) < 1e-9);
-  assert.equal(FACTOR_WEIGHTS.tokenomics, 0.16);
+  assert.equal(FACTOR_WEIGHTS.tokenomics, 0);
+  assert.equal(FACTOR_WEIGHTS.narrative, 0);
 });
 
 function row(partial: Partial<CoinRow> & Pick<CoinRow, "symbol" | "name" | "rank">): CoinRow {
@@ -190,7 +191,8 @@ test("portfolio sleeves are about 100 percent", () => {
   const sleeves = buildPortfolio(ranked, "neutral");
   const total = sleeveTotal(sleeves);
   assert.ok(Math.abs(total - 1) < 0.02);
-  assert.equal(sleeves[0]?.targetPct, 55);
+  assert.equal(sleeves[0]?.targetPct, 100);
+  assert.equal(sleeves[1]?.targetPct, 0);
 });
 
 test("dominance bias", () => {

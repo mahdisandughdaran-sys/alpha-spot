@@ -62,22 +62,37 @@ function row(partial: Partial<CoinRow> & Pick<CoinRow, "symbol" | "name" | "rank
   };
 }
 
-const kill = { status: "NORMAL" } as BtcKillSwitch;
+const kill = {
+  status: "NORMAL",
+  aboveEma200: true,
+  weeklySupportBroken: false,
+  severeWeekly: false,
+  weeklyStructure: "bull",
+} as BtcKillSwitch;
 const btc = row({ symbol: "BTC", name: "Bitcoin", rank: 1, score: 60 });
 const link = row({ symbol: "LINK", name: "Chainlink", rank: 12, score: 90 });
+
+const zone = {
+  symbol: "LINK",
+  status: "in-zone",
+  priceUsd: 10,
+  zone: { low: 9, high: 11, invalidation: 8, touches: 2, atr: 0.4, reason: "" },
+} as Opportunity;
 
 test("a missing exchange list does not invent an alt buy", () => {
   const verdict = buildVerdict({
     ranked: [link, btc],
     regime: "neutral",
     kill,
-    opportunities: [],
+    opportunities: [zone],
     listed: null,
     horizon: "week",
+    dominance: 50,
+    dominancePrev: 53,
+    satelliteEarned: true,
   });
-  assert.equal(verdict.kind, "cash");
-  assert.match(verdict.reason, /هیچ ارزی نخر/);
-  assert.match(verdict.reason, /فهرست تأیید نشد/);
+  assert.equal(verdict.kind, "stay");
+  assert.equal(verdict.symbol, "BTC");
 });
 
 test("an unlisted alt is not a buy", () => {
@@ -85,36 +100,67 @@ test("an unlisted alt is not a buy", () => {
     ranked: [link, btc],
     regime: "neutral",
     kill,
-    opportunities: [],
+    opportunities: [zone],
     listed: new Set(["BTC"]),
     horizon: "month",
+    dominance: 50,
+    dominancePrev: 53,
+    satelliteEarned: true,
   });
-  assert.equal(verdict.kind, "cash");
-  assert.match(verdict.reason, /هیچ ارزی نخر/);
-  assert.match(verdict.reason, /LINK/);
-  assert.doesNotMatch(verdict.reason, /فهرست تأیید نشد/);
+  assert.notEqual(verdict.kind, "buy");
+  assert.equal(verdict.symbol, "BTC");
 });
 
-test("a listed alt in the buy zone is a buy", () => {
-  const opp = {
-    symbol: "LINK",
-    status: "in-zone",
-    priceUsd: 10,
-    zone: { low: 9, high: 11, invalidation: 8, touches: 2, atr: 0.4, reason: "" },
-  } as Opportunity;
+test("a listed alt in the zone is not a buy until the satellite is earned", () => {
   const verdict = buildVerdict({
     ranked: [link, btc],
     regime: "neutral",
     kill,
-    opportunities: [opp],
+    opportunities: [zone],
     listed: new Set(["LINK", "BTC"]),
     horizon: "week",
+    dominance: 50,
+    dominancePrev: 53,
+    satelliteEarned: false,
+  });
+  assert.equal(verdict.kind, "wait");
+  assert.equal(verdict.symbol, "BTC");
+});
+
+test("a listed alt in the zone is a buy only when the satellite was earned", () => {
+  const verdict = buildVerdict({
+    ranked: [link, btc],
+    regime: "neutral",
+    kill,
+    opportunities: [zone],
+    listed: new Set(["LINK", "BTC"]),
+    horizon: "week",
+    dominance: 50,
+    dominancePrev: 53,
+    satelliteEarned: true,
   });
   assert.equal(verdict.kind, "buy");
   assert.equal(verdict.symbol, "LINK");
 });
 
-test("bitcoin season does not buy bitcoin when it is not a spot entry", () => {
+test("a holiday pauses a new satellite and does not cash the core", () => {
+  const verdict = buildVerdict({
+    ranked: [link, btc],
+    regime: "neutral",
+    kill,
+    opportunities: [zone],
+    listed: new Set(["LINK", "BTC"]),
+    horizon: "week",
+    dominance: 50,
+    dominancePrev: 53,
+    satelliteEarned: true,
+    pauseSatellites: true,
+  });
+  assert.equal(verdict.kind, "wait");
+  assert.equal(verdict.symbol, "BTC");
+});
+
+test("bitcoin season does not send the book to cash", () => {
   const close = row({ symbol: "LINK", name: "Chainlink", rank: 12, score: 72 });
   const leader = row({ symbol: "BTC", name: "Bitcoin", rank: 1, score: 70 });
   const verdict = buildVerdict({
@@ -125,8 +171,6 @@ test("bitcoin season does not buy bitcoin when it is not a spot entry", () => {
     listed: new Set(["LINK", "BTC"]),
     horizon: "month",
   });
-  assert.equal(verdict.kind, "cash");
-  assert.equal(verdict.symbol, null);
-  assert.match(verdict.reason, /هیچ ارزی نخر/);
-  assert.match(verdict.reason, /فصل بیت‌کوین/);
+  assert.equal(verdict.kind, "stay");
+  assert.equal(verdict.symbol, "BTC");
 });

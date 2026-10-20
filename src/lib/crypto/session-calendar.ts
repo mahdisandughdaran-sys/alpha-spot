@@ -94,14 +94,14 @@ function evaluate(now: Date): Omit<SessionDay, "nextClosed"> {
     reasons,
     holidays,
     earlyClose: early,
-    titleFa: blockSpot ? "امروز خرید اسپات توصیه نمی‌شود" : "تقویم معامله باز است",
-    titleEn: blockSpot ? "No spot buy is recommended today" : "The trading calendar is open",
+    titleFa: blockSpot ? "تعطیلی · خرید تازه باز نمی‌شود" : "تقویم معامله باز است",
+    titleEn: blockSpot ? "Holiday · no new buy opens" : "The trading calendar is open",
     reasonFa: blockSpot
-      ? `امروز ${namesFa} است. میز فقط وقتی بورس نیویورک کامل بسته است خرید اسپات را نگه می‌دارد.`
-      : "جمعه و تعطیل رسمی ایران دیگر خرید را نمی‌بندد. فقط تعطیلی کامل بورس نیویورک مانده است.",
+      ? `امروز ${namesFa} است. خرید تازه باز نمی‌شود. هسته سر جایش می‌ماند؛ تعطیلی کلید قطع نیست و دفتر را نقد نمی‌کند.`
+      : "جمعه و تعطیل رسمی ایران دیگر خرید را نمی‌بندد. فقط تعطیلی کامل بورس نیویورک خرید تازه را نگه می‌دارد.",
     reasonEn: blockSpot
-      ? `Today is ${namesEn}. The desk holds a spot buy only when the New York market is fully closed.`
-      : "Fridays and Iranian public holidays no longer block a buy. Only a full NYSE close does.",
+      ? `Today is ${namesEn}. A new buy does not open. The core stays; a holiday is not the kill switch and does not liquidate the book.`
+      : "Fridays and Iranian public holidays no longer block a buy. Only a full NYSE close pauses a new buy.",
   };
 }
 

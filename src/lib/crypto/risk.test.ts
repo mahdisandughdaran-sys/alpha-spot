@@ -134,7 +134,7 @@ const normalKill: BtcKillSwitch = {
   note: "normal",
 };
 
-test("broken weekly alt/btc support rotates the position", () => {
+test("broken weekly structure returns the position to bitcoin, not the next alt", () => {
   const coins = [
     row({ symbol: "BTC", name: "Bitcoin", rank: 1, score: 80 }),
     row({
@@ -153,11 +153,25 @@ test("broken weekly alt/btc support rotates the position", () => {
     normalKill,
   );
   assert.equal(advice.action, "REBALANCE");
-  assert.equal(advice.targetSymbol, "LINK");
+  assert.equal(advice.targetSymbol, "BTC");
   assert.ok(advice.pnlPct != null && advice.pnlPct > 0);
 });
 
-test("score under 60 exits toward bitcoin when nothing else qualifies", () => {
+test("a locked invalidation exits to bitcoin even if the score is still high", () => {
+  const coins = [
+    row({ symbol: "BTC", name: "Bitcoin", rank: 1, score: 70 }),
+    row({ symbol: "LINK", name: "Chainlink", rank: 12, score: 90, priceUsd: 7.5 }),
+  ];
+  const advice = advisePosition(
+    { symbol: "LINK", entryUsd: 10, sizeUsd: 500, invalidationUsd: 8 },
+    coins,
+    normalKill,
+  );
+  assert.equal(advice.action, "REBALANCE");
+  assert.equal(advice.targetSymbol, "BTC");
+});
+
+test("a low score is not an exit", () => {
   const coins = [
     row({ symbol: "BTC", name: "Bitcoin", rank: 1, score: 77 }),
     row({ symbol: "DOGE", name: "Dogecoin", rank: 10, score: 48 }),
@@ -167,11 +181,11 @@ test("score under 60 exits toward bitcoin when nothing else qualifies", () => {
     coins,
     normalKill,
   );
-  assert.equal(advice.action, "REBALANCE");
-  assert.equal(advice.targetSymbol, "BTC");
+  assert.equal(advice.action, "HOLD");
+  assert.equal(advice.targetSymbol, null);
 });
 
-test("suspended book rotates alts to bitcoin and halves nothing that is already closed", () => {
+test("the kill switch sends the book to tether", () => {
   const kill: BtcKillSwitch = {
     ...normalKill,
     status: "SUSPENDED",
@@ -190,20 +204,22 @@ test("suspended book rotates alts to bitcoin and halves nothing that is already 
     [
       { symbol: "ETH", entryUsd: 2000, sizeUsd: 4000 },
       { symbol: "ARB", entryUsd: 1, sizeUsd: 1000 },
+      { symbol: "BTC", entryUsd: 100, sizeUsd: 2000 },
     ],
     coins,
     kill,
   );
-  assert.equal(plan.rows.every((r) => r.action === "REBALANCE" && r.targetSymbol === "BTC"), true);
-  assert.equal(plan.rotateUsd, 5000);
-  assert.equal(plan.destinations[0]?.symbol, "BTC");
+  assert.equal(plan.rows.every((r) => r.action === "SELL" && r.targetSymbol == null), true);
+  assert.equal(plan.sellUsd, 7000);
+  assert.equal(plan.rotateUsd, 0);
   const sleeves = buildPortfolio(coins, "alt", kill);
-  assert.equal(sleeves[0]?.legs[0]?.symbol, "BTC");
+  assert.equal(sleeves.find((sleeve) => sleeve.key === "mid")?.legs[0]?.symbol, "USDT");
+  assert.equal(sleeves.find((sleeve) => sleeve.key === "core")?.legs.length, 0);
+  assert.equal(sleeves.find((sleeve) => sleeve.key === "large")?.legs.length, 0);
   assert.ok(Math.abs(sleeveTotal(sleeves) - 1) < 0.001);
-  assert.equal(sleeves[1]?.legs.length, 0);
 });
 
-test("high risk halves alt sleeves and keeps the book funded", () => {
+test("high risk keeps the bitcoin core and opens no satellite", () => {
   const kill: BtcKillSwitch = {
     ...normalKill,
     status: "HIGH_RISK",
@@ -219,8 +235,8 @@ test("high risk halves alt sleeves and keeps the book funded", () => {
     row({ symbol: "LINK", name: "Chainlink", rank: 12, score: 70 }),
   ];
   const sleeves = buildPortfolio(ranked, "neutral", kill);
-  const base = sleeveTotal(buildPortfolio(ranked, "neutral"));
-  assert.ok(Math.abs(sleeveTotal(sleeves) - base) < 0.001);
   const btc = sleeves.flatMap((s) => s.legs).find((l) => l.symbol === "BTC");
-  assert.ok(btc && btc.weight > 0.35);
+  assert.ok(btc && Math.abs(btc.weight - 1) < 0.001);
+  assert.equal(sleeves.find((sleeve) => sleeve.key === "large")?.legs.length, 0);
+  assert.ok(Math.abs(sleeveTotal(sleeves) - 1) < 0.001);
 });

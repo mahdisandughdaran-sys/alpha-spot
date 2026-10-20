@@ -4,13 +4,16 @@ import {
   decideBook,
   dominanceIsFalling,
   dominanceLookback,
+  SATELLITE_CAP,
+  SATELLITE_MAX,
   type DominancePoint,
 } from "./book.ts";
 import { evaluateKillSwitch } from "./kill-switch.ts";
 import { maxDrawdown } from "./math.ts";
 import { evaluateAsset, type Opportunity, type SpotBar } from "./opportunity.ts";
+import { campaignExit } from "./rebalance.ts";
 import { enrichFromKlines, scoreUniverse } from "./scoring.ts";
-import type { CoinDraft } from "./types.ts";
+import type { BtcKillSwitch, CoinDraft } from "./types.ts";
 import { msg } from "@/lib/i18n/lex";
 
 export type BtBar = {
@@ -98,6 +101,62 @@ const STEP = 7;
 const COST_BPS = 15;
 /** The old 1,200-bar sample never saw this window. It includes 2022. */
 export const HOLDOUT_UNTIL_MS = Date.UTC(2023, 6, 1);
+
+/** A satellite kept from the week it opened. Weight and invalidation stay locked. */
+export type HeldSatellite = {
+  symbol: string;
+  weight: number;
+  invalidationUsd: number;
+  entryUsd: number;
+};
+
+/**
+ * Same exit as the live desk. The position stays until invalidation, a weekly
+ * pair-structure break, or the kill switch. An empty entry list — the gate
+ * closed this week — does not close it. An exit this week does not rotate
+ * into a new name the same week.
+ */
+export function stepSatelliteCampaigns(input: {
+  held: HeldSatellite[];
+  kill: BtcKillSwitch;
+  rows: { symbol: string; priceUsd: number; pairSupportBroken: boolean }[];
+  entries: HeldSatellite[];
+}): HeldSatellite[] {
+  if (bookMode(input.kill) === "cash") return [];
+  const bySymbol = new Map(input.rows.map((row) => [row.symbol, row]));
+  const kept: HeldSatellite[] = [];
+  let exited = 0;
+  for (const pos of input.held) {
+    const row = bySymbol.get(pos.symbol);
+    const reason = campaignExit({
+      kill: input.kill,
+      priceUsd: row?.priceUsd ?? null,
+      invalidationUsd: pos.invalidationUsd,
+      pairSupportBroken: Boolean(row?.pairSupportBroken),
+    });
+    if (reason) {
+      exited += 1;
+      continue;
+    }
+    kept.push(pos);
+  }
+  if (exited > 0 || bookMode(input.kill) !== "core") return kept;
+  let used = kept.reduce((sum, pos) => sum + pos.weight, 0);
+  const have = new Set(kept.map((pos) => pos.symbol));
+  const next = [...kept];
+  for (const entry of input.entries) {
+    if (have.has(entry.symbol)) continue;
+    if (next.length >= SATELLITE_MAX) break;
+    if (!(entry.weight > 0) || !(entry.invalidationUsd > 0)) continue;
+    const room = Math.max(0, SATELLITE_CAP - used);
+    const sized = Math.min(entry.weight, room);
+    if (!(sized > 0.01)) continue;
+    used += sized;
+    have.add(entry.symbol);
+    next.push({ ...entry, weight: sized });
+  }
+  return next;
+}
 
 export function satelliteBeatBaseline(input: {
   holdoutWeeks: number;
@@ -282,8 +341,9 @@ export function simulateSpotBacktest(
   const holdoutSatCurve: number[] = [];
   const holdoutRuleCurve: number[] = [];
   const holdDays = new Map<string, { periods: number; ret: number }>();
-  let heldSat: Map<string, number> = new Map();
-  let heldRule: Map<string, number> = new Map();
+  let openSats: HeldSatellite[] = [];
+  let heldSatW: Map<string, number> = new Map([["BTC", 1]]);
+  let heldRule: Map<string, number> = new Map([["BTC", 1]]);
   const meta = new Map(series.map((s) => [s.symbol, s]));
 
   const startIdx = WARMUP;
@@ -397,7 +457,28 @@ export function simulateSpotBacktest(
       listed,
       satelliteEarned: true,
     });
-    const satW = sleeveWeights(measured);
+    const entries: HeldSatellite[] = [];
+    for (const campaign of measured.campaigns) {
+      if (campaign.sleeve !== "satellite" || campaign.status !== "open") continue;
+      if (!(campaign.weight > 0) || campaign.invalidationUsd == null) continue;
+      entries.push({
+        symbol: campaign.symbol,
+        weight: campaign.weight,
+        invalidationUsd: campaign.invalidationUsd,
+        entryUsd: campaign.entryUsd ?? 0,
+      });
+    }
+    const nextSats = stepSatelliteCampaigns({
+      held: openSats,
+      kill,
+      rows: scored.map((row) => ({
+        symbol: row.symbol,
+        priceUsd: row.priceUsd,
+        pairSupportBroken: row.pairSupportBroken,
+      })),
+      entries,
+    });
+    const satW = campaignWeights(nextSats, kill);
     const ruleW = cashOnKill(kill.status);
     const satRet = portReturn(satW, day, nextDay, maps);
     const ruleRet = portReturn(ruleW, day, nextDay, maps);
@@ -405,12 +486,13 @@ export function simulateSpotBacktest(
     const b1 = priceAt(btcMap, nextDay);
     if (satRet == null || ruleRet == null || !b0 || !b1) continue;
 
-    const satTurn = turnoverOf(heldSat, satW);
+    const satTurn = turnoverOf(heldSatW, satW);
     const ruleTurn = turnoverOf(heldRule, ruleW);
     const satPeriod = (1 + satRet) * (1 - (satTurn * COST_BPS) / 10_000) - 1;
     const rulePeriod = (1 + ruleRet) * (1 - (ruleTurn * COST_BPS) / 10_000) - 1;
     if (satTurn > 1e-8) trades += 1;
-    heldSat = satW;
+    openSats = nextSats;
+    heldSatW = satW;
     heldRule = ruleW;
 
     equity *= 1 + satPeriod;
@@ -419,11 +501,18 @@ export function simulateSpotBacktest(
     periods += 1;
     if (satPeriod > 0) winners += 1;
 
-    const primary = [...satW.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "BTC";
-    const bucket = holdDays.get(primary) ?? { periods: 0, ret: 0 };
-    bucket.periods += 1;
-    bucket.ret = (1 + bucket.ret) * (1 + satPeriod) - 1;
-    holdDays.set(primary, bucket);
+    for (const [symbol, weight] of satW) {
+      if (!(weight > 0) || symbol === "USDT") continue;
+      const map = maps.get(symbol);
+      const p0 = map ? priceAt(map, day) : null;
+      const p1 = map ? priceAt(map, nextDay) : null;
+      if (!p0 || !p1) continue;
+      const symbolRet = p1 / p0 - 1;
+      const bucket = holdDays.get(symbol) ?? { periods: 0, ret: 0 };
+      bucket.periods += 1;
+      bucket.ret = (1 + bucket.ret) * (1 + symbolRet) - 1;
+      holdDays.set(symbol, bucket);
+    }
 
     const weekMs = nextDay * 86_400_000;
     curve.push({ t: weekMs, equity, btc: btcEquity, rule: ruleEquity });
@@ -488,14 +577,19 @@ export function simulateSpotBacktest(
   const holdEn = holdoutWeeks
     ? `${holdPct}% versus ${holdBasePct}%`
     : "that window is not inside this sample";
+  const tradedFrom = new Date(fromMs).toISOString().slice(0, 10);
+  const warmupFa = `گرم‌شدن ${WARMUP} روز است و اولین هفتهٔ معامله ${tradedFrom} است. سقوط مه و ژوئن ۲۰۲۲ داخل این معامله نیست؛ این «کل خرس» نیست.`;
+  const warmupEn = `Warmup is ${WARMUP} days and the first traded week is ${tradedFrom}. The May and June 2022 crash is not inside this traded path; this is not “the whole bear.”`;
+  const permissionFa = "این عدد اجازهٔ خرید آلت روی میز نیست.";
+  const permissionEn = "This number is not permission to buy an alt on the desk.";
   const note = earned
     ? msg(
-        `قمر روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط پایه را برد: ${holdFa}، و افت هم کم‌عمق‌تر بود. مسیر دفتر ${modelPct}٪ است، خط پایه ${basePct}٪، و ${faMonth} ${avgPct}٪.`,
-        `The satellite beat the baseline on the untouched window through 1 July 2023: ${holdEn}, with a shallower drop. The book path is ${modelPct}%, the baseline is ${basePct}%, and ${enMonth.toLowerCase()} was ${avgPct}%.`,
+        `مسیر کمپین روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط پایه را برد: ${holdFa}، و افت هم کم‌عمق‌تر بود. مسیر دفتر ${modelPct}٪ است، خط پایه ${basePct}٪، و ${faMonth} ${avgPct}٪. ${warmupFa} ${permissionFa}`,
+        `The campaign path beat the baseline on the untouched window through 1 July 2023: ${holdEn}, with a shallower drop. The book path is ${modelPct}%, the baseline is ${basePct}%, and ${enMonth.toLowerCase()} was ${avgPct}%. ${warmupEn} ${permissionEn}`,
       )
     : msg(
-        `قمر خاموش می‌ماند. روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط «میانگین ۲۰۰ / تتر» را نبرد (${holdFa}). دفتر زنده همان خط است: بیت‌کوین، یا تتر وقتی کلید قطع روشن است. مسیر آزمایشی ${modelPct}٪، خط پایه ${basePct}٪، خرید و نگهداری بیت‌کوین ${btcPct}٪. ${faMonth} ${avgPct}٪ بود.`,
-        `The satellite stays off. On the untouched window through 1 July 2023 it did not beat the 200-day / tether line (${holdEn}). The live book is that line: Bitcoin, or tether when the kill switch is on. The measured path was ${modelPct}%, the baseline ${basePct}%, and buy-and-hold Bitcoin ${btcPct}%. ${enMonth} was ${avgPct}%.`,
+        `قمر خاموش می‌ماند. روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط «میانگین ۲۰۰ / تتر» را نبرد (${holdFa}). دفتر زنده همان خط است: بیت‌کوین، یا تتر وقتی کلید قطع روشن است. مسیر آزمایشی ${modelPct}٪، خط پایه ${basePct}٪، خرید و نگهداری بیت‌کوین ${btcPct}٪. ${faMonth} ${avgPct}٪ بود. ${warmupFa} ${permissionFa}`,
+        `The satellite stays off. On the untouched window through 1 July 2023 it did not beat the 200-day / tether line (${holdEn}). The live book is that line: Bitcoin, or tether when the kill switch is on. The measured path was ${modelPct}%, the baseline ${basePct}%, and buy-and-hold Bitcoin ${btcPct}%. ${enMonth} was ${avgPct}%. ${warmupEn} ${permissionEn}`,
       );
 
   return {
@@ -545,8 +639,16 @@ export function simulateSpotBacktest(
         "A satellite is at most two names and 32% together. Its gates are a dominance drop over about thirty days, pair structure, and the volume, float, cliff, and venue vetoes, plus the opportunity zone. Bitcoin’s own relative strength is zero.",
       ),
       msg(
-        "قمر فقط اگر روی هفته‌های تا ۱ ژوئیه ۲۰۲۳، هم بازده و هم عمق افت را بهتر از خط پایه کند، روشن حساب می‌شود. وگرنه خاموش ماندنش نتیجهٔ همین حساب است.",
-        "The satellite counts as earned only if, on the weeks through 1 July 2023, it beats the baseline on both return and drawdown. Otherwise staying off is the result of this accounting.",
+        "قمر کمپین است. وزن و ابطالِ روز ورود قفل می‌ماند تا قیمت به همان ابطال برسد، ساختار هفتگی جفت بشکند، یا کلید قطع دفتر را به تتر ببرد. خاموش شدن دروازهٔ دامیننس خروج نیست و جابه‌جایی به آلتِ رتبهٔ بعد هم نیست.",
+        "A satellite is a campaign. The entry-day weight and invalidation stay locked until price hits that invalidation, weekly pair structure breaks, or the kill switch sends the book to tether. The dominance gate turning off is not an exit, and the exit is not a swap into the next-ranked alt.",
+      ),
+      msg(
+        "قمر فقط اگر روی هفته‌های تا ۱ ژوئیه ۲۰۲۳، هم بازده و هم عمق افت را بهتر از خط پایه کند، روی همین گزارش روشن حساب می‌شود. این پرچم به میز وصل نیست و اجازهٔ خرید آلت نیست.",
+        "The satellite counts as earned on this report only if, on the weeks through 1 July 2023, it beats the baseline on both return and drawdown. That flag is not wired to the desk and is not permission to buy an alt.",
+      ),
+      msg(
+        `گرم‌شدن ${WARMUP} روز است. از ۱ ژانویه ۲۰۲۲ اولین هفته حدوداً اوت ۲۰۲۲ است، مگر اینکه خودِ تقویم دیرتر شروع شود. سقوط مه و ژوئن ۲۰۲۲ داخل معامله نیست. تهٔ نوامبر ۲۰۲۲ هست، اگر بعد از اولین هفته باشد. این کلِ خرس نیست.`,
+        `Warmup is ${WARMUP} days. From 1 January 2022 the first week is about August 2022, unless the calendar itself starts later. The May and June 2022 crash is not in the traded path. The November 2022 low is, if it falls after the first week. This is not the whole bear.`,
       ),
       msg(
         `هزینه به اندازهٔ جابه‌جایی واقعی است، ${COST_BPS} نقطه پایه. اسلیپیج دفتر سفارش تاریخی در داده عمومی نیست. توکنومیکس و روایت وزن ندارند.`,
@@ -570,25 +672,18 @@ function cashOnKill(status: string): Map<string, number> {
   return new Map([["BTC", 1]]);
 }
 
-function sleeveWeights(book: {
-  mode: string;
-  cashWeight: number;
-  coreWeight: number;
-  campaigns: { sleeve: string; status: string; symbol: string; weight: number }[];
-}): Map<string, number> {
-  if (book.mode === "cash" || book.cashWeight >= 0.999) return new Map([["USDT", 1]]);
+function campaignWeights(held: HeldSatellite[], kill: BtcKillSwitch): Map<string, number> {
+  if (bookMode(kill) === "cash") return new Map([["USDT", 1]]);
   const weights = new Map<string, number>();
-  if (book.coreWeight > 0) weights.set("BTC", book.coreWeight);
-  for (const campaign of book.campaigns) {
-    if (campaign.sleeve === "satellite" && campaign.status === "open" && campaign.weight > 0) {
-      weights.set(campaign.symbol, (weights.get(campaign.symbol) ?? 0) + campaign.weight);
-    }
+  let used = 0;
+  for (const pos of held) {
+    if (!(pos.weight > 0)) continue;
+    weights.set(pos.symbol, (weights.get(pos.symbol) ?? 0) + pos.weight);
+    used += pos.weight;
   }
-  const sum = [...weights.values()].reduce((total, value) => total + value, 0);
-  if (!(sum > 0)) return new Map([["BTC", 1]]);
-  if (Math.abs(sum - 1) > 1e-8) {
-    for (const [key, value] of weights) weights.set(key, value / sum);
-  }
+  const core = Math.max(0, 1 - used);
+  if (core > 1e-8) weights.set("BTC", (weights.get("BTC") ?? 0) + core);
+  if (weights.size === 0) return new Map([["BTC", 1]]);
   return weights;
 }
 

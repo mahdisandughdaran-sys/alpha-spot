@@ -1,6 +1,6 @@
 import { readCache, writeCache } from "./cache.server.ts";
 import { BACKTEST_UNIVERSE, simulateSpotBacktest, type BtBar, type BacktestReport, type BtSeries } from "./backtest.ts";
-import { loadDominanceSeries, rememberSatelliteEarned } from "./dominance.server.ts";
+import { loadDominanceSeries } from "./dominance.server.ts";
 import { simulateOpportunityBacktest, type OpportunityBacktestReport } from "./opportunity-backtest.ts";
 
 const BINANCE = "https://data-api.binance.vision/api/v3";
@@ -110,7 +110,7 @@ export async function runHistoricalBacktest(): Promise<BacktestReport> {
   }
   const dominance = await loadDominanceSeries();
   const report = simulateSpotBacktest(series, dominance);
-  if (report.weeks > 0) await rememberSatelliteEarned(report.satelliteEarned);
+  // satelliteEarned stays on the report. It is not stored: the live book must not treat it as a buy.
   return report;
 }
 

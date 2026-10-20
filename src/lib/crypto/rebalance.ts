@@ -10,6 +10,24 @@ import type {
 import { bookMode } from "./book.ts";
 import { msg } from "@/lib/i18n/lex";
 
+/** The only ways a satellite campaign ends. A closed dominance gate is not one of them. */
+export function campaignExit(input: {
+  kill: BtcKillSwitch;
+  priceUsd: number | null;
+  invalidationUsd: number | null;
+  pairSupportBroken: boolean;
+}): "kill" | "invalidation" | "structure" | null {
+  if (bookMode(input.kill) === "cash") return "kill";
+  const invalidated =
+    input.invalidationUsd != null &&
+    input.priceUsd != null &&
+    input.priceUsd > 0 &&
+    input.priceUsd <= input.invalidationUsd;
+  if (invalidated) return "invalidation";
+  if (input.pairSupportBroken) return "structure";
+  return null;
+}
+
 function findCoin(coins: CoinRow[], symbol: string): CoinRow | undefined {
   const key = symbol.toUpperCase();
   return coins.find((c) => c.symbol === key);
@@ -76,7 +94,14 @@ export function advisePosition(
     );
   }
 
-  if (mode === "cash") {
+  const exit = campaignExit({
+    kill,
+    priceUsd: price,
+    invalidationUsd: holding.invalidationUsd ?? null,
+    pairSupportBroken: Boolean(coin && coin.symbol !== "BTC" && coin.pairSupportBroken),
+  });
+
+  if (exit === "kill") {
     return exitTo(
       "SELL",
       sentence(
@@ -96,23 +121,17 @@ export function advisePosition(
     );
   }
 
-  const invalidated =
-    holding.invalidationUsd != null &&
-    price != null &&
-    price > 0 &&
-    price <= holding.invalidationUsd;
-  const structureBroke = Boolean(coin?.pairSupportBroken);
-
-  if (invalidated || structureBroke) {
-    const why = invalidated
-      ? sentence(
-          "قیمت به ابطالِ قفل‌شده در روز ورود رسید. به بازنده اضافه نکن.",
-          "Price hit the invalidation locked on the entry day. Do not add to the loser.",
-        )
-      : sentence(
-          "ساختار هفتگی جفت با بیت‌کوین شکست. این خروج است، نه چرخش به آلتی که امروز امتیازش بالاتر است.",
-          "Weekly structure of the Bitcoin pair broke. This is an exit, not a rotation into whichever alt scores higher today.",
-        );
+  if (exit === "invalidation" || exit === "structure") {
+    const why =
+      exit === "invalidation"
+        ? sentence(
+            "قیمت به ابطالِ قفل‌شده در روز ورود رسید. به بازنده اضافه نکن.",
+            "Price hit the invalidation locked on the entry day. Do not add to the loser.",
+          )
+        : sentence(
+            "ساختار هفتگی جفت با بیت‌کوین شکست. این خروج است، نه چرخش به آلتی که امروز امتیازش بالاتر است.",
+            "Weekly structure of the Bitcoin pair broke. This is an exit, not a rotation into whichever alt scores higher today.",
+          );
     if (mode === "core" && btc) {
       return exitTo("REBALANCE", why, { symbol: btc.symbol, name: btc.name });
     }

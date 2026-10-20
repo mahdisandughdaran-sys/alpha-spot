@@ -9,6 +9,8 @@ import {
 } from "./scoring.ts";
 import { buildChecklist, dominanceBiasOf } from "./checklist.ts";
 import { buildPortfolio } from "./portfolio.ts";
+import { dominanceLookback } from "./book.ts";
+import { loadDominanceSeries } from "./dominance.server.ts";
 import { confidenceOf, explainPick } from "./explain.ts";
 import { evaluateKillSwitch } from "./kill-switch.ts";
 import { loadUnlockAssessments } from "./unlocks.server.ts";
@@ -20,7 +22,7 @@ import { fromBinanceTickers, fromCoinGecko } from "./universe-fallback.ts";
 import { applyLens, type Horizon, type WeightCuts } from "./lens.ts";
 import { loadVenueListing } from "./listings.server.ts";
 import { buildVerdict } from "./verdict.ts";
-import { callFromVerdict, cashCall, verdictFromCall, HORIZON_ORDER } from "./validity.ts";
+import { callFromVerdict, verdictFromCall, HORIZON_ORDER } from "./validity.ts";
 import { sessionCalendar } from "./session-calendar.ts";
 import type { VenueId } from "./venues.ts";
 import { msg } from "@/lib/i18n/lex";
@@ -638,7 +640,6 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     kill: killSwitch,
     book: pickBook,
   });
-  const portfolio = buildPortfolio(scored, regime, killSwitch);
   const sawBook = books.some((book) => book.slippageBps != null);
   const sawFunding = books.some((book) => book.funding8h != null);
   const sawOi = books.some((book) => book.openInterestUsd != null);
@@ -679,6 +680,18 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
 
   const listing = await listingPromise;
   const listed = listing.ok ? new Set(listing.bases) : null;
+  const dominanceSeries = await loadDominanceSeries();
+  const looked = dominanceLookback(dominanceSeries, Date.parse(generatedAt));
+  // The backtest flag is not a buy. Dominance is passed so the gate can be seen; the sleeve stays shut.
+  const bookExtra = {
+    dominance: looked.now,
+    dominancePrev: looked.prev,
+    opportunities: opportunities.items,
+    listed,
+    satelliteEarned: false,
+    pauseSatellites: calendar.blockSpot,
+  };
+  const portfolio = buildPortfolio(scored, regime, killSwitch, bookExtra);
   let calls: HorizonCall[] = HORIZON_ORDER.map((horizon) => {
     const ranked = byHorizon.get(horizon) ?? scored;
     return callFromVerdict(
@@ -689,18 +702,22 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
         opportunities: opportunities.items,
         listed,
         horizon,
+        dominance: looked.now,
+        dominancePrev: looked.prev,
+        satelliteEarned: false,
+        pauseSatellites: calendar.blockSpot,
       }),
       horizon,
       generatedAt,
     );
   });
   if (calendar.blockSpot) {
-    const held = calls.find((call) => call.kind === "buy")?.symbol;
-    const reason = msg(
-      `هیچ ارزی نخر. ${calendar.reasonFa}${held ? ` نام برتر مدل ${held} بود و به خاطر تعطیلی صادر نشد.` : ""}`,
-      `Do not buy any coin. ${calendar.reasonEn}${held ? ` The model's top name was ${held} and was withheld because of the holiday.` : ""}`,
+    caution.unshift(
+      msg(
+        `${calendar.reasonFa} خرید تازه باز نمی‌شود و هسته نقد نمی‌شود.`,
+        `${calendar.reasonEn} A new buy does not open, and the core is not liquidated.`,
+      ),
     );
-    calls = HORIZON_ORDER.map((horizon) => cashCall(horizon, generatedAt, reason));
   }
   const verdict = verdictFromCall(calls.find((call) => call.horizon === run.horizon) ?? calls[0]!);
   if (decision.refused) {
@@ -746,7 +763,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     pick: shown,
     runnerUp,
     viaSeasonRule: decision.viaSeasonRule,
-    refused: decision.refused || calendar.blockSpot,
+    refused: decision.refused,
     verdict,
     calls,
     listingOk: listing.ok,
@@ -754,7 +771,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     venue: run.venue,
     top: scored,
     reasons,
-    caution: calendar.blockSpot ? [verdict.reason, ...caution].slice(0, 6) : caution.slice(0, 6),
+    caution: caution.slice(0, 6),
     confidence: conf.confidence,
     confidenceNote: conf.note,
     checklist,

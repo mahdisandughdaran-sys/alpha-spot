@@ -1,6 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { simulateSpotBacktest, type BtSeries } from "./backtest.ts";
+import { simulateSpotBacktest, stepSatelliteCampaigns, type BtSeries, type HeldSatellite } from "./backtest.ts";
+import type { BtcKillSwitch } from "./types.ts";
+
+const core = {
+  status: "NORMAL",
+  aboveEma200: true,
+  weeklySupportBroken: false,
+  severeWeekly: false,
+  weeklyStructure: "bull",
+} as BtcKillSwitch;
+
+const link: HeldSatellite = {
+  symbol: "LINK",
+  weight: 0.12,
+  invalidationUsd: 8,
+  entryUsd: 10,
+};
 
 function series(symbol: string, name: string, rank: number, drift: number, quote: number): BtSeries {
   const bars = [];
@@ -38,4 +54,80 @@ test("walk-forward backtest returns a finite path against bitcoin", () => {
   assert.ok(report.monthsAhead >= 0 && report.monthsAhead <= report.monthCount);
   const compounded = report.months.reduce((product, row) => product * (1 + row.model), 1);
   assert.ok(Math.abs(compounded - (1 + report.totalReturn)) < 1e-8);
+  assert.match(report.note, /گرم‌شدن ۲۲۰ روز/);
+  assert.match(report.note, /اجازهٔ خرید آلت/);
+  assert.equal(report.assumptions.some((line) => line.includes("خاموش شدن دروازهٔ دامیننس خروج نیست")), true);
+});
+
+test("a satellite stays open after the weekly gate shuts", () => {
+  const held = stepSatelliteCampaigns({
+    held: [link],
+    kill: core,
+    rows: [{ symbol: "LINK", priceUsd: 11, pairSupportBroken: false }],
+    entries: [],
+  });
+  assert.equal(held.length, 1);
+  assert.equal(held[0]?.symbol, "LINK");
+  assert.equal(held[0]?.weight, 0.12);
+  assert.equal(held[0]?.invalidationUsd, 8);
+});
+
+test("invalidation, structure, and the kill switch close the campaign", () => {
+  const invalidated = stepSatelliteCampaigns({
+    held: [link],
+    kill: core,
+    rows: [{ symbol: "LINK", priceUsd: 8, pairSupportBroken: false }],
+    entries: [{ symbol: "SOL", weight: 0.1, invalidationUsd: 4, entryUsd: 5 }],
+  });
+  assert.equal(invalidated.length, 0);
+
+  const broken = stepSatelliteCampaigns({
+    held: [link],
+    kill: core,
+    rows: [{ symbol: "LINK", priceUsd: 12, pairSupportBroken: true }],
+    entries: [{ symbol: "SOL", weight: 0.1, invalidationUsd: 4, entryUsd: 5 }],
+  });
+  assert.equal(broken.length, 0);
+
+  const killed = stepSatelliteCampaigns({
+    held: [link],
+    kill: { ...core, status: "SUSPENDED", aboveEma200: false, severeWeekly: true },
+    rows: [{ symbol: "LINK", priceUsd: 12, pairSupportBroken: false }],
+    entries: [link],
+  });
+  assert.equal(killed.length, 0);
+});
+
+test("an open campaign does not resize and a new name needs a free week", () => {
+  const resized = stepSatelliteCampaigns({
+    held: [link],
+    kill: core,
+    rows: [{ symbol: "LINK", priceUsd: 11, pairSupportBroken: false }],
+    entries: [{ symbol: "LINK", weight: 0.3, invalidationUsd: 9, entryUsd: 11 }],
+  });
+  assert.equal(resized.length, 1);
+  assert.equal(resized[0]?.weight, 0.12);
+  assert.equal(resized[0]?.invalidationUsd, 8);
+
+  const added = stepSatelliteCampaigns({
+    held: [link],
+    kill: core,
+    rows: [{ symbol: "LINK", priceUsd: 11, pairSupportBroken: false }],
+    entries: [{ symbol: "SOL", weight: 0.1, invalidationUsd: 4, entryUsd: 5 }],
+  });
+  assert.deepEqual(
+    added.map((row) => row.symbol),
+    ["LINK", "SOL"],
+  );
+
+  const defend = stepSatelliteCampaigns({
+    held: [link],
+    kill: { ...core, status: "HIGH_RISK", aboveEma200: false },
+    rows: [{ symbol: "LINK", priceUsd: 11, pairSupportBroken: false }],
+    entries: [{ symbol: "SOL", weight: 0.1, invalidationUsd: 4, entryUsd: 5 }],
+  });
+  assert.deepEqual(
+    defend.map((row) => row.symbol),
+    ["LINK"],
+  );
 });

@@ -1,4 +1,5 @@
 import { decideBook, type SpotBook } from "./book.ts";
+import { msg } from "@/lib/i18n/lex";
 import type { BtcKillSwitch, CoinRow, Regime, Sleeve, SleeveLeg } from "./types.ts";
 import type { Opportunity } from "./opportunity.ts";
 
@@ -83,8 +84,14 @@ export function portfolioFromBook(book: SpotBook, ranked: CoinRow[]): Sleeve[] {
       title: "قمر · حداکثر دو نام",
       targetPct: Math.round(book.satelliteWeight * 100),
       note: book.satelliteEarned
-        ? "فقط وقتی هسته روشن است، دامیننس می‌افتد، جفت بالای میانگین خودش است، و وتو نخورده. روی هم کمتر از یک‌سوم."
-        : "قمر خاموش است. تا وقتی روی بازهٔ دست‌نخورده، بعد از هزینه، خط پایه را در بازده و عمق افت نبرد، امتیاز آلت دفتر را تکان نمی‌دهد.",
+        ? msg(
+            "فقط وقتی هسته روشن است، دامیننس می‌افتد، جفت بالای میانگین خودش است، و وتو نخورده. روی هم کمتر از یک‌سوم.",
+            "Only while the core is on, dominance is falling, the pair is above its own average, and no veto fired. Together, under one third.",
+          )
+        : msg(
+            "قمر به میز وصل نیست. این آستین آلت نمی‌خرد، حتی اگر بک‌تست خط پایه را برده باشد. آن عدد آزمایش است، نه اجازه.",
+            "The satellite is not wired to the desk. This sleeve does not buy an alt, even if the backtest beat the baseline. That number is an experiment, not permission.",
+          ),
       legs: satelliteLegs,
     },
     {

@@ -26,8 +26,8 @@ export function PortfolioPanel({ result }: { result: AnalysisResult }) {
         <h3 className="text-base font-medium text-fg">{tr("پرتفوی پیشنهادی اسپات", "Suggested spot portfolio")}</h3>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
           {tr(
-            "حتی با بهترین تحلیل، تمرکز کل سرمایه روی یک آلت‌کوین ریسک بالایی دارد. مدل پایه ۵۵٪ هسته، ۳۰٪ لارج‌کپ و ۱۵٪ میدکپ است. اگر کلید قطع فعال باشد وزن آلت صفر می‌شود؛ در ریسک بالا حجم آلت‌ها نصف و مابه‌التفاوت به بیت‌کوین می‌رود.",
-            "Even with the best read, putting the whole book in one alt is a high risk. The base model is 55% core, 30% large-cap, and 15% mid-cap. If the kill-switch is on, alt weight goes to zero; in high risk, alt size is halved and the difference moves to Bitcoin.",
+            "هسته بیت‌کوین است. قمر حداکثر دو نام و روی هم کمتر از یک‌سوم است و به این میز وصل نیست؛ عدد بک‌تست اجازهٔ خرید آلت نیست. نقد فقط وقتی کلید قطع روشن است: قیمت زیر میانگین ۲۰۰روزه و ساختار هفتگی شکسته. تعطیلی بورس دفتر را نقد نمی‌کند.",
+            "The core is Bitcoin. A satellite is at most two names and under one third together, and it is not wired to this desk; the backtest number is not permission to buy an alt. Cash is only the kill switch: price under the 200-day average and weekly structure broken. A market holiday does not liquidate the book.",
           )}
         </p>
       </div>
