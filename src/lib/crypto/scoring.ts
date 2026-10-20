@@ -58,7 +58,7 @@ export const FACTOR_WEIGHTS: Record<FactorKey, number> = {
 export const FACTOR_LABELS: Record<FactorKey, string> = {
   rs: msg("قدرت نسبی به بیت‌کوین", "Relative strength vs Bitcoin"),
   tokenomics: msg("وتو · گردش و آنلاک", "Veto · float and unlocks"),
-  entry: msg("موقعیت ورود", "Entry location"),
+  entry: msg("ورود · قدرت نسبی سقف‌دار", "Entry · capped relative strength"),
   trend: msg("روند کلان", "Macro trend"),
   liquidity: msg("نقدشوندگی اسپات", "Spot liquidity"),
   risk: msg("بازده به ریسک", "Return versus risk"),
@@ -79,127 +79,6 @@ function factor(key: FactorKey, score: number, note: string): FactorScore {
   };
 }
 
-function rsiEntryScore(value: number | null, shortReversal: boolean): {
-  score: number;
-  note: string;
-} {
-  if (value == null) {
-    return { score: 55, note: msg("RSI روزانه در دسترس نبود؛ وزن روی بقیه سیگنال‌ها رفت.", "Daily RSI was unavailable; weight shifted to the other signals.") };
-  }
-  if (value >= 78) {
-    return { score: 14, note: msg(
-      `RSI ${value.toFixed(0)} — اشباع خرید؛ خرید اسپات در سقف ضعیف است.`,
-      `RSI ${value.toFixed(0)} — overbought; a spot buy into the high is weak.`,
-    ) };
-  }
-  if (value >= 70) {
-    return { score: 32, note: msg(
-      `RSI ${value.toFixed(0)} — گرم؛ ریسک ادامه بدون اصلاح بالاست.`,
-      `RSI ${value.toFixed(0)} — hot; the risk of continuation without a pullback is high.`,
-    ) };
-  }
-  if (value >= 42 && value <= 58) {
-    return { score: 96, note: msg(
-      `RSI ${value.toFixed(0)} — ناحیه تعادلی مناسب برای ورود اسپات.`,
-      `RSI ${value.toFixed(0)} — a balanced zone, suitable for a spot entry.`,
-    ) };
-  }
-  if (value >= 35 && value <= 65) {
-    return { score: 84, note: msg(
-      `RSI ${value.toFixed(0)} — نه هیجانی، نه فرسوده.`,
-      `RSI ${value.toFixed(0)} — neither euphoric nor exhausted.`,
-    ) };
-  }
-  if (value >= 30 && value <= 70) {
-    return { score: 70, note: msg(
-      `RSI ${value.toFixed(0)} — قابل قبول با احتیاط.`,
-      `RSI ${value.toFixed(0)} — acceptable, with caution.`,
-    ) };
-  }
-  if (value < 25) {
-    if (shortReversal) {
-      return { score: 62, note: msg(
-        `RSI ${value.toFixed(0)} اشباع فروش است ولی برگشت کوتاه‌مدت دیده می‌شود.`,
-        `RSI ${value.toFixed(0)} is oversold, but a short-term reversal is showing.`,
-      ) };
-    }
-    return { score: 28, note: msg(
-      `RSI ${value.toFixed(0)} — چاقوی در حال سقوط؛ هنوز برگشت تأیید نشده.`,
-      `RSI ${value.toFixed(0)} — a falling knife; the reversal is not confirmed yet.`,
-    ) };
-  }
-  if (value < 35) {
-    return {
-      score: shortReversal ? 68 : 48,
-      note: msg(
-        `RSI ${value.toFixed(0)} — نزدیک اشباع فروش.`,
-        `RSI ${value.toFixed(0)} — near oversold.`,
-      ),
-    };
-  }
-  return { score: 58, note: msg(`RSI ${value.toFixed(0)}.`, `RSI ${value.toFixed(0)}.`) };
-}
-
-function pullbackScore(dist: number | null, athDd: number | null): {
-  score: number;
-  note: string;
-} {
-  if (dist != null) {
-    const pct = Math.abs(dist) * 100;
-    if (dist > -0.04) {
-      return { score: 16, note: msg(
-        `فقط ${pct.toFixed(1)}٪ زیر اوج ۳۰ روزه — خرید سقف.`,
-        `Only ${pct.toFixed(1)}% under the 30-day high — buying the high.`,
-      ) };
-    }
-    if (dist > -0.08) {
-      return { score: 40, note: msg(
-        `${pct.toFixed(1)}٪ زیر اوج ۳۰ روزه — اصلاح خیلی کم.`,
-        `${pct.toFixed(1)}% under the 30-day high — a very shallow pullback.`,
-      ) };
-    }
-    if (dist >= -0.18) {
-      return { score: 94, note: msg(
-        `${pct.toFixed(1)}٪ زیر اوج ۳۰ روزه — اصلاح سالم، نه سقوط.`,
-        `${pct.toFixed(1)}% under the 30-day high — a healthy pullback, not a collapse.`,
-      ) };
-    }
-    if (dist >= -0.28) {
-      return { score: 72, note: msg(
-        `${pct.toFixed(1)}٪ زیر اوج ۳۰ روزه — اصلاح عمیق‌تر ولی قابل کار.`,
-        `${pct.toFixed(1)}% under the 30-day high — a deeper pullback, but still workable.`,
-      ) };
-    }
-    if (dist >= -0.4) {
-      return { score: 44, note: msg(
-        `${pct.toFixed(1)}٪ زیر اوج ۳۰ روزه — آسیب دیده.`,
-        `${pct.toFixed(1)}% under the 30-day high — damaged.`,
-      ) };
-    }
-    return { score: 30, note: msg(
-      `${pct.toFixed(1)}٪ زیر اوج ۳۰ روزه — روند آسیب‌دیده.`,
-      `${pct.toFixed(1)}% under the 30-day high — a damaged trend.`,
-    ) };
-  }
-  if (athDd != null) {
-    const dd = Math.abs(athDd);
-    if (dd < 8) return { score: 28, note: msg(
-      `فقط ${dd.toFixed(0)}٪ زیر ATH — فضای کمی برای خطا.`,
-      `Only ${dd.toFixed(0)}% under ATH — little room for error.`,
-    ) };
-    if (dd < 25) return { score: 70, note: msg(`${dd.toFixed(0)}٪ زیر ATH.`, `${dd.toFixed(0)}% under ATH.`) };
-    if (dd < 55) return { score: 78, note: msg(
-      `${dd.toFixed(0)}٪ زیر ATH — از اوج تاریخی فاصله معقول.`,
-      `${dd.toFixed(0)}% under ATH — a reasonable distance from the all-time high.`,
-    ) };
-    if (dd < 80) return { score: 58, note: msg(`${dd.toFixed(0)}٪ زیر ATH.`, `${dd.toFixed(0)}% under ATH.`) };
-    return { score: 36, note: msg(
-      `${dd.toFixed(0)}٪ زیر ATH — بازار این دارایی را مدت‌ها تنبیه کرده.`,
-      `${dd.toFixed(0)}% under ATH — the market has punished this asset for a long time.`,
-    ) };
-  }
-  return { score: 55, note: msg("فاصله از اوج مشخص نبود.", "Distance from the high was not known.") };
-}
 
 export function enrichFromKlines(draft: CoinDraft): CoinDraft {
   const closes = draft.pairCloses;
@@ -363,9 +242,9 @@ export function scoreUniverse(
       scoreNarrative(d),
     ];
 
-    let score = factors.reduce((s, f) => s + f.score * f.weight, 0);
-
     const unlock = ctx?.unlocks?.get(d.symbol) ?? emptyUnlock();
+    const penalty = d.symbol === "BTC" ? 0 : unlock.penalty;
+    let score = factors.reduce((s, f) => s + f.score * f.weight, 0) - penalty;
     const tok = factors.find((f) => f.key === "tokenomics");
     if (tok) {
       tok.note = along(
@@ -404,7 +283,7 @@ export function scoreUniverse(
     const { pairCloses: _p, usdCloses: _u, usdVolumes: _v, ...rest } = d;
     return {
       ...rest,
-      unlockPenalty: d.symbol === "BTC" ? 0 : unlock.penalty,
+      unlockPenalty: penalty,
       highDilution: d.symbol === "BTC" ? false : unlock.highDilution,
       unlockPct30d: d.symbol === "BTC" ? null : unlock.pct30d,
       unlockDate: d.symbol === "BTC" ? null : unlock.nextDate,
@@ -586,30 +465,55 @@ function scoreTrend(d: CoinDraft): FactorScore {
 }
 
 function scoreEntry(d: CoinDraft): FactorScore {
-  const reversal = d.pct6h > 0 && d.pct24h > 0;
-  const rsiPart = rsiEntryScore(d.rsi14, reversal);
-  const pb = pullbackScore(d.distFrom30dHighPct, d.athDrawdownPct);
-
-  let score = 0.55 * rsiPart.score + 0.45 * pb.score;
-
-  if (d.rs7d > 0.12 && d.rs24h > 0.05) {
-    score -= 12;
+  const blend = blendRs(d);
+  let score = tanhScore(blend, 0.12, 50);
+  const bits: string[] = [];
+  if (d.symbol === "BTC") {
+    bits.push(
+      msg(
+        "ورود بیت‌کوین قدرت نسبی به خودش نیست؛ امتیاز ورود خنثی می‌ماند مگر روند سهموی شود.",
+        "Bitcoin’s entry is not relative strength versus itself; the entry score stays neutral unless the trend turns parabolic.",
+      ),
+    );
+  } else {
+    bits.push(
+      msg(
+        `ورود از قدرت نسبی سقف‌دار است: ${pct(blend)}. جلو افتادن از بیت‌کوین امتیاز دارد، نه RSI متعادل.`,
+        `Entry is capped relative strength: ${pctEn(blend)}. Leading Bitcoin scores; a balanced RSI does not.`,
+      ),
+    );
+  }
+  if (d.rs7d > 0.18) {
+    score -= 14;
+    bits.push(
+      msg(
+        "جهش ۷ روزه سهموی است و از امتیاز ورود کم شد.",
+        "The 7-day jump is parabolic, so entry points were cut.",
+      ),
+    );
   }
   if ((d.rs30d ?? 0) > 0.4 && (d.distFrom30dHighPct ?? 0) > -0.08) {
     score -= 18;
+    bits.push(
+      msg(
+        "رالی ۳۰ روزه هنوز به سقف چسبیده؛ این تعقیب سقف است.",
+        "The 30-day rally is still glued to the high; this is chasing the high.",
+      ),
+    );
   }
-  if ((d.rs30d ?? 0) > 0.8) {
+  if ((d.rs30d ?? 0) > 0.8) score -= 12;
+  if ((d.rs30d ?? 0) > 1.5) score -= 10;
+  const reversal = d.pct6h > 0 && d.pct24h > 0;
+  if (d.rsi14 != null && d.rsi14 < 25 && !reversal) {
     score -= 16;
+    bits.push(
+      msg(
+        `RSI ${d.rsi14.toFixed(0)} — چاقوی در حال سقوط، نه نقطه ورود.`,
+        `RSI ${d.rsi14.toFixed(0)} — a falling knife, not an entry.`,
+      ),
+    );
   }
-  if ((d.rs30d ?? 0) > 1.5) {
-    score -= 10;
-  }
-  if (d.rs7d > 0 && d.rs24h < -0.02 && (d.rsi14 == null || d.rsi14 < 62)) {
-    score += 8;
-  }
-
-  const note = along([rsiPart.note, pb.note], " ");
-  return factor("entry", score, note);
+  return factor("entry", score, along(bits, " "));
 }
 
 function scoreLiquidity(
@@ -761,7 +665,7 @@ export function passesSpotGate(r: CoinRow): boolean {
 
 export function pickWinner(
   ranked: CoinRow[],
-  _regime: Regime,
+  regime: Regime,
   _kill?: BtcKillSwitch,
 ): { pick: CoinRow | null; runnerUp: CoinRow | null; refused: boolean; viaSeasonRule: boolean } {
   const eligible = ranked.filter(passesSpotGate);
@@ -769,7 +673,36 @@ export function pickWinner(
     return { pick: null, runnerUp: null, refused: true, viaSeasonRule: false };
   }
   const sorted = [...eligible].sort((a, b) => b.score - a.score);
-  const pick = sorted[0] ?? null;
-  const runnerUp = sorted.find((r) => r.symbol !== pick?.symbol) ?? null;
-  return { pick, runnerUp, refused: false, viaSeasonRule: false };
+  let pick = sorted[0] ?? null;
+  let viaSeasonRule = false;
+  if (regime === "btc" && pick && pick.symbol !== "BTC") {
+    const btc = sorted.find((row) => row.symbol === "BTC");
+    if (btc && pick.score - btc.score < 3.5) {
+      pick = btc;
+      viaSeasonRule = true;
+    }
+  }
+  const runnerUp = sorted.find((row) => row.symbol !== pick?.symbol) ?? null;
+  return { pick, runnerUp, refused: false, viaSeasonRule };
+}
+
+/** The headline is the book, not the highest score. A stay or a wait is Bitcoin. */
+export function headlineForBook(
+  ranked: CoinRow[],
+  verdict: { kind: string; symbol: string | null },
+): { pick: CoinRow | null; runnerUp: CoinRow | null } {
+  const btc = ranked.find((row) => row.symbol === "BTC") ?? null;
+  const eligible = ranked.filter(passesSpotGate);
+  if (verdict.kind === "buy" && verdict.symbol) {
+    const sat =
+      eligible.find((row) => row.symbol === verdict.symbol) ??
+      ranked.find((row) => row.symbol === verdict.symbol) ??
+      null;
+    if (sat) {
+      const runnerUp = eligible.find((row) => row.symbol !== sat.symbol) ?? null;
+      return { pick: sat, runnerUp };
+    }
+  }
+  const runnerUp = eligible.find((row) => row.symbol !== "BTC") ?? null;
+  return { pick: btc, runnerUp };
 }

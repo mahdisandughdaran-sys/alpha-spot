@@ -4,6 +4,7 @@ import { vsBtc } from "./math.ts";
 import {
   detectRegime,
   enrichFromKlines,
+  headlineForBook,
   pickWinner,
   scoreUniverse,
 } from "./scoring.ts";
@@ -583,10 +584,10 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     runnerUp = pick;
     pick = btcRow;
   }
-  const shown = pick ?? btcRow;
+  let shown = pick ?? btcRow;
   const rejected = books.filter((book) => book.gate === "thin").map((book) => book.symbol);
-  const pickBook = bookBy.get(shown.symbol);
-  const conf = confidenceOf(shown, runnerUp, shown.hasKlines, klinesOk, drafts.length);
+  let pickBook = bookBy.get(shown.symbol);
+  let conf = confidenceOf(shown, runnerUp, shown.hasKlines, klinesOk, drafts.length);
   const explained = explainPick(
     shown,
     runnerUp,
@@ -623,17 +624,12 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
   if (killSwitch.active) {
     caution.unshift(killSwitch.note);
   }
-  if (shown.highDilution) {
-    caution.unshift(
-      `${shown.symbol} برچسب High Dilution Risk دارد و ${shown.unlockPenalty} امتیاز از نمره کل کم شده است.`,
-    );
-  }
   if (unlockSource === "unavailable") {
     caution.push(
       "تقویم آزادسازی الان در دسترس نبود؛ جریمه کلیف اعمال نشد. تحلیل قیمتی همچنان معتبر است.",
     );
   }
-  const checklist = buildChecklist(shown, {
+  let checklist = buildChecklist(shown, {
     regime,
     btcDominance: loaded.dominance,
     dominanceBias: dom.bias,
@@ -682,13 +678,13 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
   const listed = listing.ok ? new Set(listing.bases) : null;
   const dominanceSeries = await loadDominanceSeries();
   const looked = dominanceLookback(dominanceSeries, Date.parse(generatedAt));
-  // The backtest flag is not a buy. Dominance is passed so the gate can be seen; the sleeve stays shut.
+  // Structural gates open the satellite. The holdout flag is a report, not a veto.
   const bookExtra = {
     dominance: looked.now,
     dominancePrev: looked.prev,
     opportunities: opportunities.items,
     listed,
-    satelliteEarned: false,
+    satelliteEarned: true,
     pauseSatellites: calendar.blockSpot,
   };
   const portfolio = buildPortfolio(scored, regime, killSwitch, bookExtra);
@@ -704,7 +700,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
         horizon,
         dominance: looked.now,
         dominancePrev: looked.prev,
-        satelliteEarned: false,
+        satelliteEarned: true,
         pauseSatellites: calendar.blockSpot,
       }),
       horizon,
@@ -720,6 +716,35 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     );
   }
   const verdict = verdictFromCall(calls.find((call) => call.horizon === run.horizon) ?? calls[0]!);
+  const priorExplain = explained.caution.slice();
+  const aligned = headlineForBook(scored, verdict);
+  if (aligned.pick) {
+    pick = aligned.pick;
+    runnerUp = aligned.runnerUp;
+    shown = aligned.pick;
+    pickBook = bookBy.get(shown.symbol);
+    conf = confidenceOf(shown, runnerUp, shown.hasKlines, klinesOk, drafts.length);
+    const again = explainPick(shown, runnerUp, regime, regimeNote, btcPct7d, {
+      klinesOk,
+      klinesTried: drafts.length,
+      dominanceNote: dom.note,
+    });
+    const operational = caution.filter((line) => !priorExplain.includes(line));
+    reasons.splice(0, reasons.length, ...again.reasons);
+    caution.splice(0, caution.length, ...operational, ...again.caution);
+    checklist = buildChecklist(shown, {
+      regime,
+      btcDominance: loaded.dominance,
+      dominanceBias: dom.bias,
+      kill: killSwitch,
+      book: pickBook,
+    });
+  }
+  if (shown.highDilution) {
+    caution.unshift(
+      `${shown.symbol} برچسب High Dilution Risk دارد و ${shown.unlockPenalty} امتیاز از نمره کل کم شده است.`,
+    );
+  }
   if (decision.refused) {
     reasons.splice(0, reasons.length, verdict.reason);
   } else if (!reasons.includes(verdict.reason)) {

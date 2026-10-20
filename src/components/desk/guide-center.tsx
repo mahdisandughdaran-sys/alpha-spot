@@ -1,4 +1,4 @@
-import { useI18n } from "@/lib/i18n/locale";
+import { useState } from "react";
 import { BookOpen } from "lucide-react";
 import type { AnalysisResult } from "@/lib/crypto/types";
 import { buildAtrPlan, type FlowState } from "@/lib/crypto/spot-analytics";
@@ -18,7 +18,7 @@ const CHAPTERS = [
     short: "آنلاک",
     title: "جریمه کلیف آنلاک",
     body: "تقویم ۳۰ روز آینده روی عرضه کل سنجیده می‌شود. منبع زنده، تقویم عمومی CoinMarketCap است. API انتشار DefiLlama الان اشتراک پولی می‌خواهد، پس همان قاعده کلیف اینجا با دادهٔ در دسترس اجرا می‌شود و منبع روی صفحه نوشته می‌شود.",
-    rule: "بیش از ۲٪ عرضه در ۳۰ روز، ۸ امتیاز کم می‌کند. بیش از ۳٪ برچسب High Dilution می‌گیرد و ۱۵ امتیاز کم می‌شود. بیش از ۵٪ هجده امتیاز، و بیش از ۸٪ بیست امتیاز.",
+    rule: "بیش از ۳٪ عرضه در ۳۰ روز، ۱۵ امتیاز از نمره کل کم می‌کند و برچسب High Dilution می‌گیرد. بیش از ۵٪ هجده امتیاز، و بیش از ۸٪ بیست امتیاز. کلیف و High Dilution از خرید حذف می‌شوند.",
     advice: "آنلاک به‌تنهایی فروش نیست، ولی اگر همین توکن انتخاب مدل شد، حجم را کم کنید. اگر High Dilution باشد و آلت تمیزتری نزدیک امتیازش باشد، مدل همان تمیزتر را برمی‌دارد.",
   },
   {

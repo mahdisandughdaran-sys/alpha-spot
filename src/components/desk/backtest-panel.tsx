@@ -50,8 +50,8 @@ export function BacktestPanel() {
           <h3 className="text-base font-medium text-fg">{tr("بک‌تست سه ساله", "Three-year backtest")}</h3>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
             {tr(
-              "مسیر آزمایشی قمر را مثل میز زنده نگه می‌دارد: تا ابطالِ قفل‌شده در روز ورود، شکست ساختار هفتگی جفت، یا کلید قطع. خاموش شدن دروازهٔ همان هفته خروج نیست. گرم‌شدن ۲۲۰ روز است و سقوط مه و ژوئن ۲۰۲۲ داخل معامله نیست. این عدد اجازهٔ خرید آلت نیست.",
-              "The measured path holds a satellite the way the live desk does: until the invalidation locked on the entry day, a weekly pair-structure break, or the kill switch. The gate turning off that week is not an exit. Warmup is 220 days, so the May and June 2022 crash is not in the traded path. This number is not permission to buy an alt.",
+              "مسیر آزمایشی قمر را مثل میز زنده تا ابطال قفل‌شده، شکست ساختار هفتگی جفت، یا کلید قطع نگه می‌دارد. خودِ عدد بک‌تست سفارش نیست؛ میز فقط با دروازهٔ ساختاری قمر می‌خرد. گرم‌شدن ۲۲۰ روز است و سقوط مه و ژوئن ۲۰۲۲ داخل معامله نیست.",
+              "The measured path holds a satellite the way the live desk does, until the locked invalidation, a weekly pair-structure break, or the kill switch. The backtest number itself is not an order; the desk buys a satellite only through the structural gates. Warmup is 220 days, so the May and June 2022 crash is not in the traded path.",
             )}
           </p>
         </div>

@@ -14,7 +14,7 @@ const FACTORS = [
   {
     w: "۱۶٪",
     t: "موقعیت ورود",
-    d: "RSI روزانه و فاصله از اوج ۳۰ روزه. اشباع خرید و خرید سقف امتیاز از دست می‌دهند؛ اصلاح ۶ تا ۱۸ درصدی سالم پاداش می‌گیرد.",
+    d: "قدرت نسبی سقف‌دار روی جفت بیت‌کوین. جلو افتادن از بیت امتیاز ورود است. جهش سهموی و چاقوی در حال سقوط امتیاز از دست می‌دهند. RSI متعادل به‌تنهایی نقطه ورود نیست.",
   },
   {
     w: "۱۶٪",
@@ -52,7 +52,7 @@ const FACTORS_EN = [
   {
     w: "16%",
     t: "Entry location",
-    d: "Daily RSI and distance from the 30-day high. Overbought and buying the high lose points; a healthy 6–18% pullback is paid.",
+    d: "Capped relative strength on the Bitcoin pair. Leading Bitcoin is the entry score. A parabolic jump and a falling knife lose points. A balanced RSI is not an entry by itself.",
   },
   {
     w: "16%",

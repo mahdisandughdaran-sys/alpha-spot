@@ -248,7 +248,7 @@ export function decideBook(input: {
     }
     const invalidation = zone?.invalidation ?? null;
     const weight = invalidation != null ? sizeFor(row.priceUsd, invalidation) : null;
-    if (weight == null || input.pauseSatellites || !input.satelliteEarned) {
+    if (weight == null || input.pauseSatellites) {
       if (!candidate) {
         candidate = {
           symbol: row.symbol,
@@ -258,14 +258,14 @@ export function decideBook(input: {
           weight: 0,
           entryUsd: row.priceUsd,
           invalidationUsd: invalidation,
-          reason: !input.satelliteEarned
+          reason: input.pauseSatellites
             ? msg(
-                `${row.symbol} در محدوده است، ولی قمر خاموش است تا روی بازهٔ دست‌نخورده خط پایه را ببرد.`,
-                `${row.symbol} is in the zone, but the satellite stays off until it beats the baseline on the untouched window.`,
+                `${row.symbol} در محدوده است، ولی تقویم امروز قمر تازه باز نمی‌کند. هسته دست نمی‌خورد.`,
+                `${row.symbol} is in the zone, but the calendar does not open a new satellite today. The core stays put.`,
               )
             : msg(
-                `${row.symbol} در محدوده است، ولی امروز قمر تازه باز نمی‌شود.`,
-                `${row.symbol} is in the zone, but a new satellite does not open today.`,
+                `${row.symbol} در محدوده است، ولی فاصله تا ابطال برای اندازه گرفتن کافی نیست.`,
+                `${row.symbol} is in the zone, but the distance to invalidation is not enough to size a position.`,
               ),
         };
         reachUsd = zone ? (row.priceUsd > zone.high ? zone.high : zone.low) : null;

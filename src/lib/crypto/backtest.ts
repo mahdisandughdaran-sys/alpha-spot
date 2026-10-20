@@ -578,7 +578,8 @@ export function simulateSpotBacktest(
     ? `${holdPct}% versus ${holdBasePct}%`
     : "that window is not inside this sample";
   const tradedFrom = new Date(fromMs).toISOString().slice(0, 10);
-  const warmupFa = `گرم‌شدن ${WARMUP} روز است و اولین هفتهٔ معامله ${tradedFrom} است. سقوط مه و ژوئن ۲۰۲۲ داخل این معامله نیست؛ این «کل خرس» نیست.`;
+  const warmupDaysFa = String(WARMUP).replace(/[0-9]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)] ?? digit);
+  const warmupFa = `گرم‌شدن ${warmupDaysFa} روز است و اولین هفتهٔ معامله ${tradedFrom} است. سقوط مه و ژوئن ۲۰۲۲ داخل این معامله نیست؛ این «کل خرس» نیست.`;
   const warmupEn = `Warmup is ${WARMUP} days and the first traded week is ${tradedFrom}. The May and June 2022 crash is not inside this traded path; this is not “the whole bear.”`;
   const permissionFa = "این عدد اجازهٔ خرید آلت روی میز نیست.";
   const permissionEn = "This number is not permission to buy an alt on the desk.";
@@ -588,8 +589,8 @@ export function simulateSpotBacktest(
         `The campaign path beat the baseline on the untouched window through 1 July 2023: ${holdEn}, with a shallower drop. The book path is ${modelPct}%, the baseline is ${basePct}%, and ${enMonth.toLowerCase()} was ${avgPct}%. ${warmupEn} ${permissionEn}`,
       )
     : msg(
-        `قمر خاموش می‌ماند. روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط «میانگین ۲۰۰ / تتر» را نبرد (${holdFa}). دفتر زنده همان خط است: بیت‌کوین، یا تتر وقتی کلید قطع روشن است. مسیر آزمایشی ${modelPct}٪، خط پایه ${basePct}٪، خرید و نگهداری بیت‌کوین ${btcPct}٪. ${faMonth} ${avgPct}٪ بود. ${warmupFa} ${permissionFa}`,
-        `The satellite stays off. On the untouched window through 1 July 2023 it did not beat the 200-day / tether line (${holdEn}). The live book is that line: Bitcoin, or tether when the kill switch is on. The measured path was ${modelPct}%, the baseline ${basePct}%, and buy-and-hold Bitcoin ${btcPct}%. ${enMonth} was ${avgPct}%. ${warmupEn} ${permissionEn}`,
+        `گزارش: قمر روی بازهٔ دست‌نخورده تا ۱ ژوئیه ۲۰۲۳ خط «میانگین ۲۰۰ / تتر» را نبرد (${holdFa}). میز زنده به این پرچم نگاه نمی‌کند و قمر را فقط با دروازهٔ ساختاری باز می‌کند. مسیر آزمایشی ${modelPct}٪، خط پایه ${basePct}٪، خرید و نگهداری بیت‌کوین ${btcPct}٪. ${faMonth} ${avgPct}٪ بود. ${warmupFa} ${permissionFa}`,
+        `Report: on the untouched window through 1 July 2023 the satellite did not beat the 200-day / tether line (${holdEn}). The live desk does not read this flag; a satellite opens only through the structural gates. The measured path was ${modelPct}%, the baseline ${basePct}%, and buy-and-hold Bitcoin ${btcPct}%. ${enMonth} was ${avgPct}%. ${warmupEn} ${permissionEn}`,
       );
 
   return {
@@ -643,8 +644,8 @@ export function simulateSpotBacktest(
         "A satellite is a campaign. The entry-day weight and invalidation stay locked until price hits that invalidation, weekly pair structure breaks, or the kill switch sends the book to tether. The dominance gate turning off is not an exit, and the exit is not a swap into the next-ranked alt.",
       ),
       msg(
-        "قمر فقط اگر روی هفته‌های تا ۱ ژوئیه ۲۰۲۳، هم بازده و هم عمق افت را بهتر از خط پایه کند، روی همین گزارش روشن حساب می‌شود. این پرچم به میز وصل نیست و اجازهٔ خرید آلت نیست.",
-        "The satellite counts as earned on this report only if, on the weeks through 1 July 2023, it beats the baseline on both return and drawdown. That flag is not wired to the desk and is not permission to buy an alt.",
+        "قمر فقط اگر روی هفته‌های تا ۱ ژوئیه ۲۰۲۳، هم بازده و هم عمق افت را بهتر از خط پایه کند، روی همین گزارش «به‌دست‌آمده» حساب می‌شود. میز زنده این پرچم را وتو نمی‌کند؛ خرید قمر همان دروازهٔ ساختاری است. این عدد به‌تنهایی اجازهٔ خرید آلت نیست.",
+        "The satellite counts as earned on this report only if, on the weeks through 1 July 2023, it beats the baseline on both return and drawdown. The live desk does not use that flag as a veto; a satellite buy is the structural gate. This number alone is not permission to buy an alt.",
       ),
       msg(
         `گرم‌شدن ${WARMUP} روز است. از ۱ ژانویه ۲۰۲۲ اولین هفته حدوداً اوت ۲۰۲۲ است، مگر اینکه خودِ تقویم دیرتر شروع شود. سقوط مه و ژوئن ۲۰۲۲ داخل معامله نیست. تهٔ نوامبر ۲۰۲۲ هست، اگر بعد از اولین هفته باشد. این کلِ خرس نیست.`,

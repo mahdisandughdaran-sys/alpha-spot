@@ -111,7 +111,7 @@ test("an unlisted alt is not a buy", () => {
   assert.equal(verdict.symbol, "BTC");
 });
 
-test("a listed alt in the zone is not a buy until the satellite is earned", () => {
+test("a listed alt in the zone is a buy even when the holdout flag is off", () => {
   const verdict = buildVerdict({
     ranked: [link, btc],
     regime: "neutral",
@@ -123,11 +123,11 @@ test("a listed alt in the zone is not a buy until the satellite is earned", () =
     dominancePrev: 53,
     satelliteEarned: false,
   });
-  assert.equal(verdict.kind, "wait");
-  assert.equal(verdict.symbol, "BTC");
+  assert.equal(verdict.kind, "buy");
+  assert.equal(verdict.symbol, "LINK");
 });
 
-test("a listed alt in the zone is a buy only when the satellite was earned", () => {
+test("a listed alt in the zone stays a buy when the holdout flag is on", () => {
   const verdict = buildVerdict({
     ranked: [link, btc],
     regime: "neutral",

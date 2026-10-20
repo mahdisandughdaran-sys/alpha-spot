@@ -12,10 +12,10 @@ import {
 } from "./math.ts";
 import { mcFdvRatio } from "./catalog.ts";
 import { isNonSpotCandidate } from "./exclusions.ts";
-import { FACTOR_WEIGHTS, factorWeightSum, pickWinner } from "./scoring.ts";
+import { FACTOR_WEIGHTS, factorWeightSum, headlineForBook, pickWinner, scoreUniverse } from "./scoring.ts";
 import { buildPortfolio, sleeveTotal } from "./portfolio.ts";
 import { dominanceBiasOf } from "./checklist.ts";
-import type { CoinRow, FactorScore } from "./types.ts";
+import type { CoinDraft, CoinRow, FactorScore, UnlockAssessment } from "./types.ts";
 
 test("vsBtc is opportunity cost, not dollar change", () => {
   const rs = vsBtc(10, 15);
@@ -198,4 +198,107 @@ test("portfolio sleeves are about 100 percent", () => {
 test("dominance bias", () => {
   assert.equal(dominanceBiasOf(57, 0.08, -0.05).bias, "rising");
   assert.equal(dominanceBiasOf(50, 0.01, 0.04).bias, "falling");
+});
+
+function draft(partial: Partial<CoinRow> & Pick<CoinRow, "symbol" | "name" | "rank">): CoinDraft {
+  const coin = row(partial);
+  const {
+    score: _score,
+    factors: _factors,
+    unlockPenalty: _unlockPenalty,
+    highDilution: _highDilution,
+    unlockPct30d: _unlockPct30d,
+    unlockDate: _unlockDate,
+    unlockDays: _unlockDays,
+    unlockCliff: _unlockCliff,
+    buySignal: _buySignal,
+    sizeMultiplier: _sizeMultiplier,
+    ...rest
+  } = coin;
+  return {
+    ...rest,
+    pairCloses: [100, 101, 102, 103, 104, 105, 106, 107],
+    usdCloses: [100, 101, 102, 103, 104, 105, 106, 107],
+    usdVolumes: [10, 10, 10, 10, 11, 11, 12, 12],
+  };
+}
+
+test("the headline follows the book, not the higher score", () => {
+  const btc = row({ symbol: "BTC", name: "Bitcoin", rank: 1, score: 60 });
+  const alt = row({ symbol: "LINK", name: "Chainlink", rank: 12, score: 90 });
+  const stay = headlineForBook([alt, btc], { kind: "stay", symbol: "BTC" });
+  assert.equal(stay.pick?.symbol, "BTC");
+  const buy = headlineForBook([alt, btc], { kind: "buy", symbol: "LINK" });
+  assert.equal(buy.pick?.symbol, "LINK");
+});
+
+test("unlock penalty is subtracted from the total score", () => {
+  const btc = draft({ symbol: "BTC", name: "Bitcoin", rank: 1 });
+  const link = draft({
+    symbol: "LINK",
+    name: "Chainlink",
+    rank: 12,
+    rs7d: 0.04,
+    rs14d: 0.04,
+    rs30d: 0.04,
+  });
+  const plain = scoreUniverse([btc, link], "neutral");
+  const hit: UnlockAssessment = {
+    penalty: 18,
+    highDilution: true,
+    pct30d: 6,
+    nextDate: null,
+    nextDays: 10,
+    cliff: false,
+    note: "unlock",
+  };
+  const penalised = scoreUniverse([btc, link], "neutral", {
+    unlocks: new Map([["LINK", hit]]),
+  });
+  const before = plain.find((item) => item.symbol === "LINK")?.score ?? 0;
+  const after = penalised.find((item) => item.symbol === "LINK")?.score ?? 0;
+  assert.equal(after, Math.max(0, before - 18));
+  assert.equal(
+    penalised.find((item) => item.symbol === "BTC")?.score,
+    plain.find((item) => item.symbol === "BTC")?.score,
+  );
+});
+
+test("entry pays capped relative strength and cuts a parabolic jump", () => {
+  const btc = draft({ symbol: "BTC", name: "Bitcoin", rank: 1 });
+  const calm = draft({
+    symbol: "SOL",
+    name: "Solana",
+    rank: 5,
+    rsi14: 50,
+    rs7d: 0.08,
+    rs14d: 0.08,
+    rs30d: 0.1,
+    distFrom30dHighPct: -0.03,
+  });
+  const flat = draft({
+    symbol: "ADA",
+    name: "Cardano",
+    rank: 10,
+    rsi14: 50,
+    rs7d: 0,
+    rs14d: 0,
+    rs30d: 0,
+    distFrom30dHighPct: -0.12,
+  });
+  const parabola = draft({
+    symbol: "PEPE",
+    name: "Pepe",
+    rank: 20,
+    rsi14: 74,
+    rs7d: 0.25,
+    rs14d: 0.3,
+    rs30d: 0.55,
+    distFrom30dHighPct: -0.02,
+  });
+  const rows = scoreUniverse([btc, calm, flat, parabola], "neutral");
+  const entry = (symbol: string) =>
+    rows.find((item) => item.symbol === symbol)?.factors.find((factor) => factor.key === "entry")?.score ?? 0;
+  assert.ok(entry("SOL") > entry("ADA"));
+  assert.ok(entry("PEPE") < entry("SOL"));
 });

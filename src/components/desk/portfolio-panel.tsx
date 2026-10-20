@@ -26,8 +26,8 @@ export function PortfolioPanel({ result }: { result: AnalysisResult }) {
         <h3 className="text-base font-medium text-fg">{tr("پرتفوی پیشنهادی اسپات", "Suggested spot portfolio")}</h3>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
           {tr(
-            "هسته بیت‌کوین است. قمر حداکثر دو نام و روی هم کمتر از یک‌سوم است و به این میز وصل نیست؛ عدد بک‌تست اجازهٔ خرید آلت نیست. نقد فقط وقتی کلید قطع روشن است: قیمت زیر میانگین ۲۰۰روزه و ساختار هفتگی شکسته. تعطیلی بورس دفتر را نقد نمی‌کند.",
-            "The core is Bitcoin. A satellite is at most two names and under one third together, and it is not wired to this desk; the backtest number is not permission to buy an alt. Cash is only the kill switch: price under the 200-day average and weekly structure broken. A market holiday does not liquidate the book.",
+            "هسته بیت‌کوین است. قمر حداکثر دو نام و روی هم کمتر از یک‌سوم است و فقط با دروازهٔ ساختاری باز می‌شود: هسته روشن، افت دامیننس، داخل محدوده، بدون وتو. عدد بک‌تست به‌تنهایی سفارش نیست. نقد فقط وقتی کلید قطع روشن است: قیمت زیر میانگین ۲۰۰روزه و ساختار هفتگی شکسته. تعطیلی بورس دفتر را نقد نمی‌کند.",
+            "The core is Bitcoin. A satellite is at most two names and under one third together, and it opens only through the structural gates: core on, falling dominance, inside the zone, no veto. The backtest number alone is not an order. Cash is only the kill switch: price under the 200-day average and weekly structure broken. A market holiday does not liquidate the book.",
           )}
         </p>
       </div>

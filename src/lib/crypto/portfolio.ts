@@ -83,15 +83,10 @@ export function portfolioFromBook(book: SpotBook, ranked: CoinRow[]): Sleeve[] {
       key: "large",
       title: "قمر · حداکثر دو نام",
       targetPct: Math.round(book.satelliteWeight * 100),
-      note: book.satelliteEarned
-        ? msg(
-            "فقط وقتی هسته روشن است، دامیننس می‌افتد، جفت بالای میانگین خودش است، و وتو نخورده. روی هم کمتر از یک‌سوم.",
-            "Only while the core is on, dominance is falling, the pair is above its own average, and no veto fired. Together, under one third.",
-          )
-        : msg(
-            "قمر به میز وصل نیست. این آستین آلت نمی‌خرد، حتی اگر بک‌تست خط پایه را برده باشد. آن عدد آزمایش است، نه اجازه.",
-            "The satellite is not wired to the desk. This sleeve does not buy an alt, even if the backtest beat the baseline. That number is an experiment, not permission.",
-          ),
+      note: msg(
+        "فقط وقتی هسته روشن است، دامیننس می‌افتد، جفت بالای میانگین خودش است، قیمت داخل محدوده است و وتو نخورده. روی هم کمتر از یک‌سوم. پرچم بک‌تست این دروازه را نمی‌بندد.",
+        "Only while the core is on, dominance is falling, the pair is above its own average, price is inside the zone, and no veto fired. Together, under one third. The backtest flag does not close this gate.",
+      ),
       legs: satelliteLegs,
     },
     {

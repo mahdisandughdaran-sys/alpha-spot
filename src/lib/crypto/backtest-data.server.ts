@@ -110,7 +110,7 @@ export async function runHistoricalBacktest(): Promise<BacktestReport> {
   }
   const dominance = await loadDominanceSeries();
   const report = simulateSpotBacktest(series, dominance);
-  // satelliteEarned stays on the report. It is not stored: the live book must not treat it as a buy.
+  // The report keeps satelliteEarned as a statistic. The live book does not read it.
   return report;
 }
 
