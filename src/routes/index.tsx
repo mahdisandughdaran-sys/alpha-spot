@@ -75,10 +75,11 @@ import { formatUsd } from "@/components/desk/format";
 import { plain, msg } from "@/lib/i18n/lex";
 import { useI18n } from "@/lib/i18n/locale";
 import { IntelDesk } from "@/components/desk/intel-desk";
+import { BuyMachine, SessionClocks } from "@/components/desk/buy-machine";
 
 export const Route = createFileRoute("/")({ component: Home });
 
-type Tab = "pick" | "macro" | "flow" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
+type Tab = "machine" | "pick" | "macro" | "flow" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
 
 function Home() {
   const { tr, locale } = useI18n();
@@ -92,7 +93,7 @@ function Home() {
   const [stage, setStage] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("pick");
+  const [tab, setTab] = useState<Tab>("machine");
   const [history, setHistory] = useState<RunSummary[]>([]);
   const [watched, setWatched] = useState<string[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
@@ -454,7 +455,7 @@ function Home() {
     setStatus("loading");
     setError(null);
     setStage(0);
-    setTab("pick");
+    setTab("machine");
     setFlowOnly(false);
     const timer = window.setInterval(() => {
       setStage((s) => Math.min(s + 1, stages.length - 1));
@@ -535,8 +536,8 @@ function Home() {
               ) : (
                 <p className="mt-3 text-base leading-relaxed text-muted">
                   {tr(
-                    "رادار خرید اسپات چهار لایه را با هم می‌خواند: رژیم آن‌چین بیت‌کوین، دیوار نقدینگی، واگرایی روزانه و هفتگی، و امتیاز انباشت از ۰ تا ۱۰۰. اگر وقت خرید نباشد، جواب اجتناب است نه یک اسم اجباری.",
-                    "The spot radar reads four layers together: Bitcoin’s on-chain regime, liquidity walls, daily and weekly divergence, and an accumulation score from 0 to 100. If it is not time to buy, the answer is avoid — not a forced name.",
+                    "بعد از تحلیل، ماشین خرید یک بلیت می‌دهد: سه لیمیت داخل ناحیه، حجم از روی ریسک و ابطال، و ساعت تهران و نیویورک. اگر وقت خرید نباشد، بلیت خالی است — نه یک اسم اجباری.",
+                    "After the rank, the buy machine prints one ticket: three limits inside the zone, size from your risk and the invalidation, and the Tehran and New York clocks. If it is not time to buy, the ticket is empty — not a forced name.",
                   )}
                 </p>
               )}
@@ -605,6 +606,12 @@ function Home() {
           {headerMeta ? <p className="text-xs text-subtle">{headerMeta}</p> : null}
           {flash ? <p className="text-sm text-warn">{tr(flash)}</p> : null}
         </header>
+
+        {status === "done" && result && tab === "machine" ? (
+          <BuyMachine result={result} live={live} />
+        ) : (
+          <SessionClocks />
+        )}
 
         <IntelDesk />
 
@@ -685,6 +692,7 @@ function Home() {
             <nav className="flex gap-1 overflow-x-auto rounded-lg bg-surface p-1 shadow-[var(--shadow-border)]">
               {(
                 [
+                  ["machine", tr("بلیت", "Ticket")],
                   ["pick", tr("انتخاب", "Pick")],
                   ["macro", tr("کلان", "Macro")],
                   ["flow", tr("همگرایی", "Confluence")],

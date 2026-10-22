@@ -160,6 +160,24 @@ var Check = createLucideIcon("check", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Copy = createLucideIcon("copy", [["rect", {
+	width: "14",
+	height: "14",
+	x: "8",
+	y: "8",
+	rx: "2",
+	ry: "2",
+	key: "17jyea"
+}], ["path", {
+	d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2",
+	key: "zix9uf"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Info = createLucideIcon("info", [
 	["circle", {
 		cx: "12",
@@ -354,4 +372,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { Activity as _, ShieldAlert as a, Newspaper as c, KeyRound as d, Info as f, ArrowLeft as g, ArrowRight as h, ShieldCheck as i, Minus as l, CalendarOff as m, TriangleAlert as n, Send as o, Check as p, Star as r, RefreshCw as s, X as t, LoaderCircle as u };
+export { ArrowLeft as _, ShieldAlert as a, Newspaper as c, KeyRound as d, Info as f, ArrowRight as g, CalendarOff as h, ShieldCheck as i, Minus as l, Check as m, TriangleAlert as n, Send as o, Copy as p, Star as r, RefreshCw as s, X as t, LoaderCircle as u, Activity as v };
