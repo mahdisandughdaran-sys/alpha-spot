@@ -74,6 +74,7 @@ import { applyDeskFilter, type DeskFilter } from "@/lib/crypto/risk-view";
 import { formatUsd } from "@/components/desk/format";
 import { plain, msg } from "@/lib/i18n/lex";
 import { useI18n } from "@/lib/i18n/locale";
+import { IntelDesk } from "@/components/desk/intel-desk";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -534,8 +535,8 @@ function Home() {
               ) : (
                 <p className="mt-3 text-base leading-relaxed text-muted">
                   {tr(
-                    "سه حکم جدا: یک روز، یک هفته، یک ماه. حکم هفته و ماه تا پایان اعتبار عوض نمی‌شود. اگر وقت خرید اسپات نباشد، جواب این است که هیچ ارزی نخری.",
-                    "Three separate calls: one day, one week, one month. The week and month calls do not change before they expire. If it is not time to buy spot, the answer is to buy no coin.",
+                    "رادار خرید اسپات چهار لایه را با هم می‌خواند: رژیم آن‌چین بیت‌کوین، دیوار نقدینگی، واگرایی روزانه و هفتگی، و امتیاز انباشت از ۰ تا ۱۰۰. اگر وقت خرید نباشد، جواب اجتناب است نه یک اسم اجباری.",
+                    "The spot radar reads four layers together: Bitcoin’s on-chain regime, liquidity walls, daily and weekly divergence, and an accumulation score from 0 to 100. If it is not time to buy, the answer is avoid — not a forced name.",
                   )}
                 </p>
               )}
@@ -604,6 +605,8 @@ function Home() {
           {headerMeta ? <p className="text-xs text-subtle">{headerMeta}</p> : null}
           {flash ? <p className="text-sm text-warn">{tr(flash)}</p> : null}
         </header>
+
+        <IntelDesk />
 
         <MacroRail news={news} />
 
