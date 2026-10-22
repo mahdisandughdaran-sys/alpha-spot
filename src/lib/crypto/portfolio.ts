@@ -71,29 +71,43 @@ export function portfolioFromBook(book: SpotBook, ranked: CoinRow[]): Sleeve[] {
   return [
     {
       key: "core",
-      title: "هسته · بیت‌کوین",
+      title: msg("بیت‌کوین", "Bitcoin"),
       targetPct: Math.round(book.coreWeight * 100),
       note:
         book.mode === "cash"
-          ? "کلید قطع روشن است. هسته هم در تتر است، نه در بیت‌کوین."
-          : "هر روز بالای میانگین ۲۰۰روزه با ساختار هفتگی سالم، بخش اصلی دفتر بیت‌کوین است. نزدیکی به سقف دلیل خروج نیست.",
+          ? msg(
+              "روند بیت‌کوین شکسته است. حتی خود بیت‌کوین در تتر است، نه در بازار.",
+              "Bitcoin’s trend is broken. Even Bitcoin is held as tether, not in the market.",
+            )
+          : book.plan.phase === "defend"
+            ? msg(
+                "فقط دیده‌بان. بقیه دفتر نقد است تا ریزش ادامه پیدا کند بدون اینکه تمام سرمایه داخلش باشد.",
+                "Scout only. The rest of the book is cash so a continuing drop is not fully held.",
+              )
+            : msg(
+                "روند سالم است و آلت رهبری نمی‌کند، یا هنوز نامی برای آستین آلت واجد شرایط نشده. این بخش بیت‌کوین است.",
+                "The trend is healthy and alts are not leading, or no name has qualified for the alt sleeve yet. This sleeve is Bitcoin.",
+              ),
       legs: coreLegs,
     },
     {
       key: "large",
-      title: "قمر · حداکثر دو نام",
+      title: msg("آلت لیدر", "Leading alts"),
       targetPct: Math.round(book.satelliteWeight * 100),
       note: msg(
-        "فقط وقتی هسته روشن است، دامیننس می‌افتد، جفت بالای میانگین خودش است، قیمت داخل محدوده است و وتو نخورده. روی هم کمتر از یک‌سوم. پرچم بک‌تست این دروازه را نمی‌بندد.",
-        "Only while the core is on, dominance is falling, the pair is above its own average, price is inside the zone, and no veto fired. Together, under one third. The backtest flag does not close this gate.",
+        "حداکثر دو نام نقدشونده. فقط وقتی روند بیت‌کوین سالم است. در فصل کامل با ساختار جفت وارد می‌شود؛ در شروع چرخش باید داخل محدوده باشد. هر نام حداکثر حدود یک‌سوم دفتر است.",
+        "At most two liquid names. Only while Bitcoin’s trend is healthy. A full season can enter on pair structure; an early rotation must be inside the zone. Each name is at most about a third of the book.",
       ),
       legs: satelliteLegs,
     },
     {
       key: "mid",
-      title: "نقد · فقط کلید قطع",
+      title: msg("نقد", "Cash"),
       targetPct: Math.round(book.cashWeight * 100),
-      note: "زیر میانگین ۲۰۰روزه و ساختار هفتگی شکسته، تنها جایی است که دفتر به تتر می‌رود. RSI داغ و کم بودن امتیاز اینجا نیستند.",
+      note: msg(
+        "نقد وقتی است که روند بیت‌کوین می‌شکند، یا یکی از ستون‌ها خراب است و فقط دیده‌بان مانده. RSI داغ دلیل نقد شدن نیست.",
+        "Cash is for a broken Bitcoin trend, or for one broken pillar where only a scout remains. A hot RSI is not a reason to go to cash.",
+      ),
       legs: cashLegs,
     },
   ];
@@ -137,6 +151,7 @@ export function buildPortfolio(
     listed: extra?.listed === undefined ? null : extra.listed,
     satelliteEarned: extra?.satelliteEarned ?? false,
     pauseSatellites: extra?.pauseSatellites ?? false,
+    regime: _regime,
   });
   return portfolioFromBook(book, ranked);
 }

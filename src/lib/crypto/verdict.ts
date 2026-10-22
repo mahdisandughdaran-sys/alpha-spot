@@ -8,10 +8,10 @@ export type { SpotVerdict, VerdictKind };
 export { isListed };
 
 export function verdictSentence(kind: VerdictKind): string {
-  if (kind === "buy") return msg("قمر را باز کن", "Open the satellite");
-  if (kind === "stay") return msg("هسته را نگه دار", "Hold the core");
-  if (kind === "wait") return msg("هسته بماند، قمر منتظر محدوده", "Keep the core, satellite waits");
-  return msg("هیچ‌چیز نخر", "Buy nothing");
+  if (kind === "buy") return msg("آلت بخر", "Buy the alt");
+  if (kind === "stay") return msg("بیت‌کوین بخر", "Buy Bitcoin");
+  if (kind === "wait") return msg("بیت‌کوین بماند، آلت منتظر محدوده", "Keep Bitcoin, the alt waits for the zone");
+  return msg("نقد بمان", "Stay in cash");
 }
 
 /**
@@ -41,6 +41,7 @@ export function buildVerdict(input: {
     listed: input.listed,
     satelliteEarned: input.satelliteEarned ?? false,
     pauseSatellites: input.pauseSatellites ?? false,
+    regime: input.regime,
   });
   return book.verdict;
 }

@@ -9,8 +9,8 @@ import {
   scoreUniverse,
 } from "./scoring.ts";
 import { buildChecklist, dominanceBiasOf } from "./checklist.ts";
-import { buildPortfolio } from "./portfolio.ts";
-import { dominanceLookback } from "./book.ts";
+import { buildPortfolio, portfolioFromBook } from "./portfolio.ts";
+import { decideBook, dominanceLookback } from "./book.ts";
 import { loadDominanceSeries } from "./dominance.server.ts";
 import { confidenceOf, explainPick } from "./explain.ts";
 import { evaluateKillSwitch } from "./kill-switch.ts";
@@ -686,8 +686,14 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     listed,
     satelliteEarned: true,
     pauseSatellites: calendar.blockSpot,
+    regime,
   };
-  const portfolio = buildPortfolio(scored, regime, killSwitch, bookExtra);
+  const spotBook = decideBook({
+    ranked: scored,
+    kill: killSwitch,
+    ...bookExtra,
+  });
+  const portfolio = portfolioFromBook(spotBook, scored);
   let calls: HorizonCall[] = HORIZON_ORDER.map((horizon) => {
     const ranked = byHorizon.get(horizon) ?? scored;
     return callFromVerdict(
@@ -702,6 +708,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
         dominancePrev: looked.prev,
         satelliteEarned: true,
         pauseSatellites: calendar.blockSpot,
+        regime,
       }),
       horizon,
       generatedAt,
@@ -801,6 +808,7 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
     confidenceNote: conf.note,
     checklist,
     portfolio,
+    plan: spotBook.plan,
     books,
     opportunities,
     dataCache: "live" satisfies DataCache,

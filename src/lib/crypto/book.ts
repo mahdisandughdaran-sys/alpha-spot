@@ -1,8 +1,15 @@
-import { msg, splitBi } from "@/lib/i18n/lex";
+import { msg } from "@/lib/i18n/lex";
 import { candidateBases } from "./exclusions.ts";
 import { weeklyFromDaily } from "./math.ts";
 import type { Opportunity } from "./opportunity.ts";
-import type { BtcKillSwitch, CoinRow, SpotVerdict } from "./types.ts";
+import {
+  explainCycle,
+  planCycle,
+  stanceFromWeights,
+  cycleMode,
+  type CyclePlan,
+} from "./planner.ts";
+import type { BtcKillSwitch, CoinRow, Regime, SpotVerdict } from "./types.ts";
 
 /** Together, satellites stay under one third of capital. Not a fitted weight. */
 export const SATELLITE_CAP = 0.32;
@@ -34,6 +41,7 @@ export type Campaign = {
 
 export type SpotBook = {
   mode: BookMode;
+  plan: CyclePlan;
   /** False unless the alt sleeve beat the one-line rule on the untouched window. */
   satelliteEarned: boolean;
   dominanceFalling: boolean;
@@ -54,11 +62,7 @@ export function isListed(symbol: string, bases: Set<string> | null): boolean {
 }
 
 export function bookMode(kill: BtcKillSwitch): BookMode {
-  if (kill.status === "SUSPENDED") return "cash";
-  const broken =
-    kill.weeklySupportBroken || kill.severeWeekly || kill.weeklyStructure === "bear";
-  if (kill.aboveEma200 === true && !broken) return "core";
-  return "defend";
+  return cycleMode(kill);
 }
 
 export function dominanceIsFalling(now: number | null, prev: number | null): boolean {
@@ -142,9 +146,26 @@ function sizeFor(priceUsd: number, invalidationUsd: number): number | null {
   return Math.min(SATELLITE_CAP, RISK_FRACTION / distance);
 }
 
+function medianAltRs7(ranked: CoinRow[]): number | null {
+  const values = ranked
+    .filter((row) => row.symbol !== "BTC" && Number.isFinite(row.rs7d))
+    .map((row) => row.rs7d)
+    .sort((a, b) => a - b);
+  if (!values.length) return null;
+  return values[Math.floor(values.length / 2)] ?? null;
+}
+
+function trendStop(row: CoinRow): number | null {
+  if (!(row.priceUsd > 0)) return null;
+  const closes = (row.pairSeries ?? []).map((point) => point.v).filter((value) => value > 0);
+  const structured = campaignInvalidation(closes, row.priceUsd);
+  if (structured) return structured.invalidationUsd;
+  return row.priceUsd * 0.88;
+}
+
 /**
- * One book. Core is Bitcoin. Cash is only the kill switch.
- * A satellite is at most two names and never the book.
+ * Cycle book. Cash in a broken Bitcoin trend, Bitcoin when alts are not
+ * leading, and one or two liquid alts only while Bitcoin's trend is healthy.
  */
 export function decideBook(input: {
   ranked: CoinRow[];
@@ -154,7 +175,8 @@ export function decideBook(input: {
   opportunities: Opportunity[];
   listed: Set<string> | null;
   satelliteEarned: boolean;
-  /** Holiday and similar: do not open a new satellite. The core stays. */
+  regime?: Regime;
+  /** Holiday and similar: do not open a new alt. A healthy core is not cashed. */
   pauseSatellites?: boolean;
 }): SpotBook {
   const btc = input.ranked.find((row) => row.symbol === "BTC");
@@ -162,6 +184,54 @@ export function decideBook(input: {
   const falling = dominanceIsFalling(input.dominance, input.dominancePrev);
   const btcName = btc?.name ?? "Bitcoin";
   const btcPrice = btc?.priceUsd ?? input.kill.priceUsd ?? null;
+  const intent = planCycle({
+    kill: input.kill,
+    regime: input.regime ?? "neutral",
+    dominance: input.dominance,
+    dominancePrev: input.dominancePrev,
+    medianRs7: medianAltRs7(input.ranked),
+  });
+
+  const pack = (weights: {
+    cash: number;
+    btc: number;
+    alt: number;
+    names: { symbol: string; name: string; weight: number }[];
+    campaigns: Campaign[];
+    candidate: Campaign | null;
+    verdict: SpotVerdict;
+  }): SpotBook => {
+    const stance = stanceFromWeights(weights.cash, weights.btc, weights.alt);
+    const copy = explainCycle({
+      phase: intent.phase,
+      stance,
+      cash: weights.cash,
+      btc: weights.btc,
+      alt: weights.alt,
+      names: weights.names,
+    });
+    const plan: CyclePlan = {
+      phase: intent.phase,
+      stance,
+      cash: weights.cash,
+      btc: weights.btc,
+      alt: weights.alt,
+      names: weights.names,
+      ...copy,
+    };
+    return {
+      mode,
+      plan,
+      satelliteEarned: input.satelliteEarned,
+      dominanceFalling: falling,
+      coreWeight: weights.btc,
+      satelliteWeight: weights.alt,
+      cashWeight: weights.cash,
+      campaigns: weights.campaigns,
+      candidate: weights.candidate,
+      verdict: { ...weights.verdict, reason: plan.why },
+    };
+  };
 
   const coreCampaign = (weight: number, reason: string): Campaign => ({
     symbol: "BTC",
@@ -176,8 +246,8 @@ export function decideBook(input: {
 
   if (mode === "cash" || !btc) {
     const reason = msg(
-      "هیچ‌چیز نخر. کلید قطع روشن است: قیمت زیر میانگین ۲۰۰روزه است و ساختار هفتگی شکسته. آلت صفر است و دفتر به تتر می‌رود.",
-      "Buy nothing. The kill switch is on: price is under the 200-day average and weekly structure is broken. Alts are zero and the book is in tether.",
+      "هیچ‌چیز نخر. روند بیت‌کوین شکسته و دفتر در تتر است. آلت صفر است.",
+      "Buy nothing. Bitcoin’s trend is broken and the book is in tether. Alts are zero.",
     );
     const cash: Campaign = {
       symbol: "USDT",
@@ -189,13 +259,11 @@ export function decideBook(input: {
       invalidationUsd: null,
       reason,
     };
-    return {
-      mode: "cash",
-      satelliteEarned: input.satelliteEarned,
-      dominanceFalling: falling,
-      coreWeight: 0,
-      satelliteWeight: 0,
-      cashWeight: 1,
+    return pack({
+      cash: 1,
+      btc: 0,
+      alt: 0,
+      names: [],
       campaigns: [cash, coreCampaign(0, reason)],
       candidate: null,
       verdict: {
@@ -207,7 +275,43 @@ export function decideBook(input: {
         invalidationUsd: null,
         reason,
       },
+    });
+  }
+
+  if (mode === "defend") {
+    const reason = msg(
+      "دفتر کوتاه شد. بیشتر سرمایه نقد می‌ماند و فقط دیده‌بان بیت‌کوین سر جایش است. آلت باز نمی‌شود.",
+      "The book is cut back. Most of the capital stays in cash and only a Bitcoin scout remains. No alt opens.",
+    );
+    const cashWeight = intent.cash;
+    const coreWeight = intent.btc;
+    const cash: Campaign = {
+      symbol: "USDT",
+      name: "Tether",
+      sleeve: "cash",
+      status: "open",
+      weight: cashWeight,
+      entryUsd: 1,
+      invalidationUsd: null,
+      reason,
     };
+    return pack({
+      cash: cashWeight,
+      btc: coreWeight,
+      alt: 0,
+      names: [],
+      campaigns: [cash, coreCampaign(coreWeight, reason)],
+      candidate: null,
+      verdict: {
+        kind: "stay",
+        symbol: "BTC",
+        name: btcName,
+        priceUsd: btcPrice,
+        reachUsd: null,
+        invalidationUsd: null,
+        reason,
+      },
+    });
   }
 
   const structural = input.ranked
@@ -215,19 +319,19 @@ export function decideBook(input: {
     .filter((row) => row.aboveSma === true && !row.pairSupportBroken && row.pairWeekly !== "bear")
     .sort((a, b) => b.score - a.score);
 
-  const gatesOpen = mode === "core" && falling;
-  const pool = gatesOpen ? structural.slice(0, SATELLITE_MAX) : [];
+  const altPhase = intent.phase === "early-alt" || intent.phase === "alt-season";
+  const trend = intent.phase === "alt-season";
+  const pool = altPhase ? structural.slice(0, Math.max(intent.maxNames, 1)) : [];
 
   let reachUsd: number | null = null;
   let candidate: Campaign | null = null;
-  const open: Campaign[] = [];
-  let used = 0;
+  const ready: { row: CoinRow; invalidation: number }[] = [];
 
   for (const row of pool) {
     const opp = input.opportunities.find((item) => item.symbol === row.symbol);
     const zone = opp?.zone;
-    const waiting = !inZone(opp);
-    if (waiting) {
+    const inside = inZone(opp);
+    if (input.pauseSatellites || (!inside && !trend)) {
       if (!candidate) {
         reachUsd = zone && zone.low > 0 ? (row.priceUsd > zone.high ? zone.high : zone.low) : null;
         candidate = {
@@ -236,19 +340,23 @@ export function decideBook(input: {
           sleeve: "satellite",
           status: "waiting",
           weight: 0,
-          entryUsd: null,
+          entryUsd: inside ? row.priceUsd : null,
           invalidationUsd: zone?.invalidation ?? null,
-          reason: msg(
-            `${row.symbol} چهار دروازهٔ قمر را دارد ولی هنوز در محدوده نیست. هسته دست نمی‌خورد.`,
-            `${row.symbol} has cleared the four satellite gates but is not in the zone. The core stays put.`,
-          ),
+          reason: input.pauseSatellites
+            ? msg(
+                `${row.symbol} آماده است، ولی تقویم امروز آلت تازه باز نمی‌کند. تا آن وقت دفتر بیت‌کوین می‌ماند.`,
+                `${row.symbol} is ready, but the calendar does not open a new alt today. Until then the book stays in Bitcoin.`,
+              )
+            : msg(
+                `${row.symbol} دروازهٔ ساختاری را دارد ولی هنوز در محدوده نیست. تا ورود، دفتر بیت‌کوین می‌ماند.`,
+                `${row.symbol} has cleared the structural gate but is not in the zone yet. Until the entry, the book stays in Bitcoin.`,
+              ),
         };
       }
       continue;
     }
-    const invalidation = zone?.invalidation ?? null;
-    const weight = invalidation != null ? sizeFor(row.priceUsd, invalidation) : null;
-    if (weight == null || input.pauseSatellites) {
+    const invalidation = inside && zone?.invalidation ? zone.invalidation : trendStop(row);
+    if (invalidation == null || sizeFor(row.priceUsd, invalidation) == null) {
       if (!candidate) {
         candidate = {
           symbol: row.symbol,
@@ -258,119 +366,94 @@ export function decideBook(input: {
           weight: 0,
           entryUsd: row.priceUsd,
           invalidationUsd: invalidation,
-          reason: input.pauseSatellites
-            ? msg(
-                `${row.symbol} در محدوده است، ولی تقویم امروز قمر تازه باز نمی‌کند. هسته دست نمی‌خورد.`,
-                `${row.symbol} is in the zone, but the calendar does not open a new satellite today. The core stays put.`,
-              )
-            : msg(
-                `${row.symbol} در محدوده است، ولی فاصله تا ابطال برای اندازه گرفتن کافی نیست.`,
-                `${row.symbol} is in the zone, but the distance to invalidation is not enough to size a position.`,
-              ),
+          reason: msg(
+            `${row.symbol} در بازی است، ولی فاصله تا ابطال برای یک کمپین کافی نیست.`,
+            `${row.symbol} is in play, but the distance to invalidation is not enough for a campaign.`,
+          ),
         };
         reachUsd = zone ? (row.priceUsd > zone.high ? zone.high : zone.low) : null;
       }
       continue;
     }
-    const room = Math.max(0, SATELLITE_CAP - used);
-    const sized = Math.min(weight, room);
-    if (!(sized > 0.01)) continue;
-    used += sized;
+    ready.push({ row, invalidation });
+  }
+
+  const count = ready.length;
+  const each = count > 0 ? Math.min(SATELLITE_CAP, intent.altBudget / count) : 0;
+  const open: Campaign[] = [];
+  for (const item of ready) {
+    if (!(each > 0.01)) continue;
     const campaign: Campaign = {
-      symbol: row.symbol,
-      name: row.name,
+      symbol: item.row.symbol,
+      name: item.row.name,
       sleeve: "satellite",
       status: "open",
-      weight: sized,
-      entryUsd: row.priceUsd,
-      invalidationUsd: invalidation,
+      weight: each,
+      entryUsd: item.row.priceUsd,
+      invalidationUsd: item.invalidation,
       reason: msg(
-        `${row.symbol} قمر است، نه هسته. ابطال روی ${invalidation?.toFixed(4)} قفل شد. به بازنده اضافه نکن.`,
-        `${row.symbol} is a satellite, not the core. Invalidation is locked at ${invalidation?.toFixed(4)}. Do not add to a loser.`,
+        `${item.row.symbol} آستین آلت است، نه تمام دفتر. ابطال روی ${item.invalidation.toFixed(4)} قفل شد. به بازنده اضافه نکن.`,
+        `${item.row.symbol} is an alt sleeve, not the whole book. Invalidation is locked at ${item.invalidation.toFixed(4)}. Do not add to a loser.`,
       ),
     };
     open.push(campaign);
     if (!candidate) candidate = campaign;
   }
 
-  if (!candidate && mode === "core" && !falling) {
-    const named = structural[0];
-    if (named) {
-      candidate = {
-        symbol: named.symbol,
-        name: named.name,
-        sleeve: "satellite",
-        status: "empty",
-        weight: 0,
-        entryUsd: null,
-        invalidationUsd: null,
-        reason: msg(
-          "دامیننس بیت‌کوین در حال افت نیست. میانهٔ ۷روزه برای باز کردن قمر کافی نیست.",
-          "Bitcoin dominance is not falling. A 7-day median is not enough to open a satellite.",
-        ),
-      };
-    }
-  }
-
-  const coreWeight = 1 - used;
-  const holdReason =
-    mode === "defend"
-      ? msg(
-          "هسته را نگه دار. یکی از دو شرط روند بیت‌کوین غایب است، ولی کلید قطع روشن نیست. این نقد شدن نیست و RSI داغ هم دلیل خروج نیست.",
-          "Hold the core. One of Bitcoin’s two trend conditions is missing, but the kill switch is off. This is not cash, and a hot RSI is not an exit.",
-        )
-      : open.length > 0
-        ? msg(
-            `هسته بیت‌کوین است (${Math.round(coreWeight * 100)}٪). قمر: ${open.map((row) => `${row.symbol} ${Math.round(row.weight * 100)}٪`).join("، ")}. خروج قمر فقط با ابطال، شکست ساختار هفتگی جفت، یا کلید قطع.`,
-            `The core is Bitcoin (${Math.round(coreWeight * 100)}%). Satellite: ${open.map((row) => `${row.symbol} ${Math.round(row.weight * 100)}%`).join(", ")}. A satellite exits only on invalidation, a weekly pair-structure break, or the kill switch.`,
-          )
-        : candidate?.status === "waiting"
-          ? msg(
-              `هسته را نگه دار: بیت‌کوین. ${splitBi(candidate.reason).fa}`,
-              `Hold the core: Bitcoin. ${splitBi(candidate.reason).en ?? splitBi(candidate.reason).fa}`,
-            )
-          : msg(
-              "هسته را نگه دار: بیت‌کوین. بالای میانگین ۲۰۰روزه و ساختار هفتگی نشکسته. لازم نیست به ناحیهٔ RSI برسد و نزدیکی به سقف دلیل نقد شدن نیست.",
-              "Hold the core: Bitcoin. Price is above the 200-day average and weekly structure is not broken. It does not need an RSI zone, and trading near the high is not a reason to go to cash.",
-            );
-
+  const used = open.reduce((sum, row) => sum + row.weight, 0);
+  const cashWeight = used > 0 ? intent.cash : 0;
+  const coreWeight = Math.max(0, 1 - used - cashWeight);
+  const reason = msg(
+    "دفتر چرخه ساخته شد.",
+    "The cycle book was built.",
+  );
   const campaigns: Campaign[] = [
-    coreCampaign(coreWeight, holdReason),
+    coreCampaign(coreWeight, reason),
+    ...(cashWeight > 0
+      ? [
+          {
+            symbol: "USDT",
+            name: "Tether",
+            sleeve: "cash" as const,
+            status: "open" as const,
+            weight: cashWeight,
+            entryUsd: 1,
+            invalidationUsd: null,
+            reason,
+          },
+        ]
+      : []),
     ...open,
     ...(candidate && candidate.status !== "open" ? [candidate] : []),
   ];
-
   const lead = open[0];
-  const verdict =
-    lead != null
-      ? {
-          kind: "buy" as const,
-          symbol: lead.symbol,
-          name: lead.name,
-          priceUsd: lead.entryUsd,
-          reachUsd: null,
-          invalidationUsd: lead.invalidationUsd,
-          reason: holdReason,
-        }
-      : {
-          kind: (candidate?.status === "waiting" ? "wait" : "stay") as "wait" | "stay",
-          symbol: "BTC" as string | null,
-          name: btcName,
-          priceUsd: btcPrice,
-          reachUsd,
-          invalidationUsd: null,
-          reason: holdReason,
-        };
+  const verdict: SpotVerdict = lead
+    ? {
+        kind: "buy",
+        symbol: lead.symbol,
+        name: lead.name,
+        priceUsd: lead.entryUsd,
+        reachUsd: null,
+        invalidationUsd: lead.invalidationUsd,
+        reason,
+      }
+    : {
+        kind: candidate?.status === "waiting" ? "wait" : "stay",
+        symbol: "BTC",
+        name: btcName,
+        priceUsd: btcPrice,
+        reachUsd,
+        invalidationUsd: null,
+        reason,
+      };
 
-  return {
-    mode,
-    satelliteEarned: input.satelliteEarned,
-    dominanceFalling: falling,
-    coreWeight,
-    satelliteWeight: used,
-    cashWeight: 0,
+  return pack({
+    cash: cashWeight,
+    btc: coreWeight,
+    alt: used,
+    names: open.map((row) => ({ symbol: row.symbol, name: row.name, weight: row.weight })),
     campaigns,
     candidate,
     verdict,
-  };
+  });
 }

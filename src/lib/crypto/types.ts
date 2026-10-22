@@ -1,6 +1,7 @@
 import type { OpportunityBoard } from "./opportunity.ts";
 import type { FlowState, MacroRiskView, SectorMomentum } from "./spot-analytics.ts";
 import type { VenueId } from "./venues.ts";
+import type { CyclePlan } from "./planner.ts";
 
 export type FactorKey =
   | "rs"
@@ -218,6 +219,8 @@ export type AnalysisResult = {
   confidenceNote: string;
   checklist: CheckItem[];
   portfolio: Sleeve[];
+  /** Cycle brain: cash, Bitcoin, or leading alts. Missing only on older cached runs. */
+  plan?: CyclePlan;
   books: BookCheck[];
   opportunities: OpportunityBoard;
   macroRisk?: MacroRiskView;
