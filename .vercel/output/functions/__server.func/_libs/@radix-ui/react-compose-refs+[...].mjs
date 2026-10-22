@@ -426,4 +426,4 @@ function useComposedRefs(...refs) {
 }
 __name(useComposedRefs, "useComposedRefs");
 //#endregion
-export { require_react as n, useComposedRefs as t };
+export { useComposedRefs as n, require_react as r, composeRefs as t };
