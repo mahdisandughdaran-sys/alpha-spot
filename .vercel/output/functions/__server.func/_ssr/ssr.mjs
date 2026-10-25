@@ -1,9 +1,8 @@
 import { r as __exportAll } from "../_runtime.mjs";
-import { r as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
-import { A as getScriptPreloadAttrs, B as isDangerousProtocol, D as toCrossJSONStream, E as toCrossJSONAsync, F as _getRenderedMatches, G as rootRouteId, I as executeRewriteInput, K as isNotFound, L as invariant, M as resolveManifestAssetLink, N as resolveManifestCssLink, P as waitForReason, U as isRedirect, V as isPromise, W as parseRedirect, a as isSsrResponse, c as stripSsrResponseBody, i as disposeSsrResponse, j as getStylesheetHref, n as bindSsrResponseToRequest, o as normalizeSsrResponse, p as RouterProvider, r as defineHandlerCallback, s as replaceSsrResponse, t as renderRouterToStream, w as fromJSON } from "../_libs/@tanstack/react-router+[...].mjs";
+import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
+import { E as fromJSON, F as resolveManifestCssLink, G as isRedirect, H as isDangerousProtocol, I as waitForReason, J as isNotFound, K as parseRedirect, L as _getRenderedMatches, M as getScriptPreloadAttrs, N as getStylesheetHref, O as toCrossJSONAsync, P as resolveManifestAssetLink, R as executeRewriteInput, S as require_jsx_runtime, U as isPromise, a as disposeSsrResponse, c as replaceSsrResponse, i as defineHandlerCallback, k as toCrossJSONStream, l as stripSsrResponseBody, m as RouterProvider, o as isSsrResponse, q as rootRouteId, r as bindSsrResponseToRequest, s as normalizeSsrResponse, t as renderRouterToStream, z as invariant } from "../_libs/@tanstack/react-router+[...].mjs";
 import { n as createServerHistory } from "../_libs/tanstack__history.mjs";
 import { a as defaultSerovalDeserializerPlugins, i as createRawStreamRPCPlugin, n as attachRouterServerSsrUtils, o as makeSerovalPlugin, r as getNormalizedURL, s as createSerializationAdapter, t as mergeHeaders } from "../_libs/@tanstack/router-core+[...].mjs";
-import { n as require_jsx_runtime } from "../_libs/radix-ui__react-context+react.mjs";
 import { n as toResponse, t as H3Event } from "../_libs/h3-v2+rou3.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 //#region node_modules/.nitro/vite/services/ssr/index.js
@@ -105,7 +104,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-DkeoaFKc.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-DFgFzJ0A.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -127,23 +126,27 @@ async function getStartManifest(matchedRoutes) {
 var manifest = {
 	"1a57782f2dbce6bdc548c7ca19f206e1ca080c248a41081285d461f214d83626": {
 		functionName: "loadUsdtRate_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"2430eb14739b94c669f882053cb7ce0e872ee809f7eb597b1f6e667f4e495a81": {
 		functionName: "checkDeskPulse_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"2975be20775612443781264b5ca2666618f65f485e3407bef4ba4edec84f952e": {
 		functionName: "runSpotAnalysis_createServerFn_handler",
-		importer: () => import("./analyze-C8D377F7.mjs")
+		importer: () => import("./analyze-C8VLA_ZZ.mjs")
 	},
 	"3d750ceb230c06ac4407a1ae107889436f44c8752c9c19bf5d7306a2a4e8cff8": {
 		functionName: "checkOpportunityQuotes_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"5469c7ef2b6a0c6da8b20e30389ebaa2b621913c5d8e6fe0888226964b424d35": {
 		functionName: "runOpportunityBacktest_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
+	},
+	"58143089ace60979264bb66678feb27a95d84fc0933a5b68e0caae12b3e42090": {
+		functionName: "runProfitMachine_createServerFn_handler",
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"aeda1b5d2fcb813d1aee768482968dab0e154d7a661f86eb7f4b93b477d24ef1": {
 		functionName: "readConfluence_createServerFn_handler",
@@ -151,7 +154,7 @@ var manifest = {
 	},
 	"b5f74dffff4b6c35ce44b7129d8d5ebb42b2ff29c152c819a7d42fa5ca8fc035": {
 		functionName: "runSpotBacktest_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"b75b2ca9a7e6b1657d3f52153d9da8c9b30fe4c58222635e1fa38d0fac75eb37": {
 		functionName: "loadSpotIntel_createServerFn_handler",
@@ -159,23 +162,23 @@ var manifest = {
 	},
 	"c46ebafb3476d206d2a8f7363ac5cbefff0a2c20a40c24eeb2c15ccc577d431b": {
 		functionName: "loadSpotBoard_createServerFn_handler",
-		importer: () => import("./spot-desk-3fAFVj-M.mjs")
+		importer: () => import("./spot-desk-DN2wD-Rt.mjs")
 	},
 	"d6d9cdc69038feacef9008e70b9d27c67fb1b102a7bbc2e3a99d3ce283b3fa4b": {
 		functionName: "dispatchDeskSignal_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"eed7d3073443c33758c00a8a490ad465452ee6d3f46e47d1fde88dd2a65e227a": {
 		functionName: "runVenue_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"f697a98ee6b797ad586422b6949d2f49da1bb56769cc8f2a69c205e8d833816f": {
 		functionName: "loadMacroDesk_createServerFn_handler",
-		importer: () => import("./ops-BdU9QMcq.mjs")
+		importer: () => import("./ops-C1YnEQ1u.mjs")
 	},
 	"fe1f268360652ffd8c110e19f0058a6289058902cc00444298fe7779506355bb": {
 		functionName: "loadSpotDesk_createServerFn_handler",
-		importer: () => import("./spot-desk-3fAFVj-M.mjs")
+		importer: () => import("./spot-desk-DN2wD-Rt.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -1580,7 +1583,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-Ckqtw-H4.mjs").then((n) => n.t),
+		import("./router-oG65GEtD.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);

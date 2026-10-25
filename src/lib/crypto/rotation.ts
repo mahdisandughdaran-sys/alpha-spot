@@ -1,4 +1,4 @@
-import { msg } from "@/lib/i18n/lex";
+import { msg } from "../i18n/lex.ts";
 import type { SpotVerdict } from "./types.ts";
 
 /** Thirty daily closes. Chosen as the month the desk already talks about, not fitted. */
@@ -248,6 +248,8 @@ function timingBook(btcReturn: number | null, btcName: string): RotationBook {
 
 export type RotationPoint = { t: number; equity: number; btc: number; rule: number };
 
+export type RotationSleeveDays = { btc: number; alt: number; cash: number };
+
 export type RotationReplay = {
   from: string;
   to: string;
@@ -264,6 +266,7 @@ export type RotationReplay = {
   recentDays: number;
   recentReturn: number;
   recentBtcReturn: number;
+  sleeveDays: RotationSleeveDays;
   curve: RotationPoint[];
   holdings: { symbol: string; periods: number; returnPct: number }[];
   final: {
@@ -271,6 +274,9 @@ export type RotationReplay = {
     reason: string;
     priceUsd: number | null;
     btcReturn: number | null;
+    breadth: number;
+    leader: string | null;
+    leaderReturn: number | null;
   };
 };
 
@@ -297,6 +303,7 @@ export function replayRotation(series: RotationSeries[]): RotationReplay | null 
   let recentDays = 0;
   let recentEquity = 1;
   let recentBtc = 1;
+  const sleeveDays: RotationSleeveDays = { btc: 0, alt: 0, cash: 0 };
   const curve: RotationPoint[] = [];
   const heldDays = new Map<string, { periods: number; equity: number }>();
   let lastRaw = rawBook(clock, clock.calendar[ROTATION_LOOKBACK] ?? clock.calendar[0]!);
@@ -347,6 +354,7 @@ export function replayRotation(series: RotationSeries[]): RotationReplay | null 
       recentEquity *= 1 + net;
       recentBtc *= 1 + bret;
     }
+    sleeveDays[book.sleeve] += 1;
     for (const [symbol, weight] of weights) {
       if (!(weight > 0) || symbol === "USDT") continue;
       const bucket = heldDays.get(symbol) ?? { periods: 0, equity: 1 };
@@ -380,6 +388,7 @@ export function replayRotation(series: RotationSeries[]): RotationReplay | null 
     recentDays,
     recentReturn: recentEquity - 1,
     recentBtcReturn: recentBtc - 1,
+    sleeveDays,
     curve,
     holdings: [...heldDays.entries()]
       .map(([symbol, row]) => ({ symbol, periods: row.periods, returnPct: row.equity - 1 }))
@@ -394,6 +403,9 @@ export function replayRotation(series: RotationSeries[]): RotationReplay | null 
       }),
       priceUsd: closeAt(clock, priceSymbol, lastDay),
       btcReturn: lastRaw.btcReturn,
+      breadth: lastRaw.breadth,
+      leader: lastRaw.book.sleeve === "alt" ? lastRaw.book.symbol : null,
+      leaderReturn: lastRaw.leaderReturn,
     },
   };
 }

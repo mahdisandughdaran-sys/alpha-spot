@@ -76,6 +76,7 @@ import { plain, msg } from "@/lib/i18n/lex";
 import { useI18n } from "@/lib/i18n/locale";
 import { IntelDesk } from "@/components/desk/intel-desk";
 import { BuyMachine, SessionClocks } from "@/components/desk/buy-machine";
+import { ProfitMachine } from "@/components/desk/profit-machine";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -536,8 +537,8 @@ function Home() {
               ) : (
                 <p className="mt-3 text-base leading-relaxed text-muted">
                   {tr(
-                    "بعد از تحلیل، ماشین خرید یک بلیت می‌دهد: سه لیمیت داخل ناحیه، حجم از روی ریسک و ابطال، و ساعت تهران و نیویورک. اگر وقت خرید نباشد، بلیت خالی است — نه یک اسم اجباری.",
-                    "After the rank, the buy machine prints one ticket: three limits inside the zone, size from your risk and the invalidation, and the Tehran and New York clocks. If it is not time to buy, the ticket is empty — not a forced name.",
+                    "ماشین سود، درست زیر این عنوان، سه خرید دارد: بیت‌کوین وقتی از همه بهتر رشد می‌کند، استیبل وقتی بازار می‌ریزد، و آلت پیشرو وقتی رشد آلت‌ها بیشتر است. همان قانون روی تاریخ واقعی با هولد بیت‌کوین مقایسه می‌شود.",
+                    "The profit machine, just under this title, has three buys: Bitcoin when it rises better than the rest, a stablecoin when the market is falling, and the leading alt when alts are growing more. That same rule is compared with holding Bitcoin on real history.",
                   )}
                 </p>
               )}
@@ -606,6 +607,8 @@ function Home() {
           {headerMeta ? <p className="text-xs text-subtle">{headerMeta}</p> : null}
           {flash ? <p className="text-sm text-warn">{tr(flash)}</p> : null}
         </header>
+
+        <ProfitMachine />
 
         {status === "done" && result && tab === "machine" ? (
           <BuyMachine result={result} live={live} />

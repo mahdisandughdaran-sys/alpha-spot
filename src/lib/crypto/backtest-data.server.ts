@@ -2,6 +2,8 @@ import { readCache, writeCache } from "./cache.server.ts";
 import { BACKTEST_UNIVERSE, simulateSpotBacktest, type BtBar, type BacktestReport, type BtSeries } from "./backtest.ts";
 import { loadDominanceSeries } from "./dominance.server.ts";
 import { simulateOpportunityBacktest, type OpportunityBacktestReport } from "./opportunity-backtest.ts";
+import { replayRotation, type RotationReplay, type RotationSeries } from "./rotation.ts";
+import { msg } from "@/lib/i18n/lex";
 
 const BINANCE = "https://data-api.binance.vision/api/v3";
 const FRESH_SEC = 12 * 60 * 60;
@@ -128,4 +130,46 @@ export async function runOpportunityHistory(): Promise<OpportunityBacktestReport
   }
   await Promise.all(Array.from({ length: 4 }, () => worker()));
   return simulateOpportunityBacktest(series);
+}
+
+function thinCurve<T>(rows: T[], max = 220): T[] {
+  if (rows.length <= max) return rows;
+  const step = (rows.length - 1) / (max - 1);
+  const out: T[] = [];
+  for (let i = 0; i < max; i++) out.push(rows[Math.round(i * step)]!);
+  return out;
+}
+
+/** Same daily history as the desk backtest. The book is the three-way rotation, not the satellite score. */
+export async function runRotationHistory(): Promise<RotationReplay> {
+  const series: RotationSeries[] = [];
+  const queue = [...BACKTEST_UNIVERSE];
+  let cursor = 0;
+  async function worker() {
+    while (cursor < queue.length) {
+      const item = queue[cursor++];
+      if (!item) continue;
+      const bars = await loadSymbol(item.symbol);
+      if (bars) series.push({ symbol: item.symbol, name: item.name, bars });
+    }
+  }
+  await Promise.all(Array.from({ length: 4 }, () => worker()));
+  if (!series.some((row) => row.symbol === "BTC")) {
+    throw new Error(
+      msg(
+        "کندل روزانه بیت‌کوین از بایننس نرسید.",
+        "Daily Bitcoin candles did not arrive from Binance.",
+      ),
+    );
+  }
+  const replay = replayRotation(series);
+  if (!replay) {
+    throw new Error(
+      msg(
+        "تاریخچه برای چرخش سه‌حالته کافی نبود.",
+        "History was not long enough for the three-way rotation.",
+      ),
+    );
+  }
+  return { ...replay, curve: thinCurve(replay.curve) };
 }

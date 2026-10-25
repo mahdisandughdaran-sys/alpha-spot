@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { BacktestReport } from "./backtest.ts";
 import type { DispatchInput, DispatchResult } from "./dispatch.server.ts";
+import type { RotationReplay } from "./rotation.ts";
 import type { OpportunityBacktestReport } from "./opportunity-backtest.ts";
 import type { PulseResult } from "./pulse.server.ts";
 import type { MacroDesk } from "./macro.ts";
@@ -11,6 +12,13 @@ export const runSpotBacktest = createServerFn({ method: "POST" }).handler(
   async (): Promise<BacktestReport> => {
     const { runHistoricalBacktest } = await import("./backtest-data.server.ts");
     return runHistoricalBacktest();
+  },
+);
+
+export const runProfitMachine = createServerFn({ method: "POST" }).handler(
+  async (): Promise<RotationReplay> => {
+    const { runRotationHistory } = await import("./backtest-data.server.ts");
+    return runRotationHistory();
   },
 );
 

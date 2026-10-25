@@ -708,7 +708,6 @@ async function computeAnalysis(run: DeskRun): Promise<AnalysisResult> {
         dominancePrev: looked.prev,
         satelliteEarned: true,
         pauseSatellites: calendar.blockSpot,
-        regime,
       }),
       horizon,
       generatedAt,
