@@ -1,5 +1,5 @@
 import { msg } from "@/lib/i18n/lex";
-import type { BtcKillSwitch, Regime } from "./types.ts";
+import type { BtcKillSwitch, Regime, VerdictKind } from "./types.ts";
 
 /**
  * Cycle brain.
@@ -10,15 +10,18 @@ import type { BtcKillSwitch, Regime } from "./types.ts";
  * dominance is falling or the median alt is clearly ahead — that is when the
  * long alt rallies happen. A broken Bitcoin trend never funds an alt.
  *
- * The weights are rules, not a fit. Nothing here is a promise of return.
+ * One posture drives the banner, the verdict, and the weights. The weights
+ * are rules, not a fit. Nothing here is a promise of return.
  */
 
 export type CyclePhase = "crash" | "defend" | "btc" | "early-alt" | "alt-season";
 export type CycleStance = "cash" | "btc" | "alt";
+/** cash: both pillars or a crash leg. defend: exactly one pillar. core: neither. */
+export type DeskPosture = "cash" | "defend" | "core";
 
 export type CycleIntent = {
   phase: CyclePhase;
-  /** Cash weight intended before an alt name actually qualifies. */
+  /** Cash weight. Non-zero only in a real crash. Alt budget is a ceiling, not a fill. */
   cash: number;
   btc: number;
   altBudget: number;
@@ -47,6 +50,10 @@ export type CyclePlan = {
 const DOMINANCE_DROP = 1.5;
 /** Four-week drop deep enough to be a crash leg, not a bull-market dip. */
 export const CRASH_MOMENTUM = -0.18;
+/** Together, satellites stay under one third of capital. Not a fitted weight. */
+export const SATELLITE_CAP = 0.32;
+/** Fraction of capital risked to the locked invalidation. */
+export const RISK_FRACTION = 0.01;
 
 function dominanceIsFalling(now: number | null, prev: number | null): boolean {
   if (now == null || prev == null) return false;
@@ -54,21 +61,26 @@ function dominanceIsFalling(now: number | null, prev: number | null): boolean {
   return now < prev - DOMINANCE_DROP;
 }
 
+/**
+ * The only risk classification the banner, the phase, and the book share.
+ * A non-severe weekly bear does not defend while price is still above the
+ * 200-day average — that kill-switch state is still NORMAL.
+ */
+export function deskPosture(
+  kill: Pick<BtcKillSwitch, "status" | "aboveEma200" | "severeWeekly" | "weeklyMomentum">,
+): DeskPosture {
+  if (kill.weeklyMomentum != null && kill.weeklyMomentum <= CRASH_MOMENTUM) return "cash";
+  const below = kill.aboveEma200 === false;
+  const severe = kill.severeWeekly === true;
+  if (kill.status === "SUSPENDED" || (below && severe)) return "cash";
+  if (kill.status === "HIGH_RISK" || below || severe) return "defend";
+  return "core";
+}
+
 export function riskPhase(kill: BtcKillSwitch): "crash" | "defend" | "trend" {
-  if (kill.status === "SUSPENDED") return "crash";
-  if (kill.weeklyMomentum != null && kill.weeklyMomentum <= CRASH_MOMENTUM) return "crash";
-  if (kill.weeklyStructure === "bear" && kill.aboveEma200 === false) return "crash";
-  if (kill.aboveEma200 == null && kill.weeklyStructure == null && kill.status === "NORMAL") {
-    return "trend";
-  }
-  if (
-    kill.status === "HIGH_RISK" ||
-    kill.severeWeekly ||
-    kill.weeklyStructure === "bear" ||
-    kill.aboveEma200 === false
-  ) {
-    return "defend";
-  }
+  const posture = deskPosture(kill);
+  if (posture === "cash") return "crash";
+  if (posture === "defend") return "defend";
   return "trend";
 }
 
@@ -78,6 +90,15 @@ export function cycleMode(kill: BtcKillSwitch): "cash" | "defend" | "core" {
   if (phase === "crash") return "cash";
   if (phase === "defend") return "defend";
   return "core";
+}
+
+/** One sentence per verdict kind. The banner and explainCycle use these same words. */
+export function bookSentence(kind: VerdictKind): string {
+  if (kind === "buy") return msg("آلت بخر", "Buy the alt");
+  if (kind === "hold") return msg("بیت‌کوین بماند، قمر بسته", "Bitcoin stays, satellite closed");
+  if (kind === "stay") return msg("بیت‌کوین بخر", "Buy Bitcoin");
+  if (kind === "wait") return msg("بیت‌کوین بماند، آلت منتظر محدوده", "Keep Bitcoin, the alt waits for the zone");
+  return msg("نقد بمان", "Stay in cash");
 }
 
 export function planCycle(input: {
@@ -92,7 +113,7 @@ export function planCycle(input: {
     return { phase: "crash", cash: 1, btc: 0, altBudget: 0, maxNames: 0 };
   }
   if (risk === "defend") {
-    return { phase: "defend", cash: 0.6, btc: 0.4, altBudget: 0, maxNames: 0 };
+    return { phase: "defend", cash: 0, btc: 1, altBudget: 0, maxNames: 0 };
   }
 
   const falling = dominanceIsFalling(input.dominance, input.dominancePrev);
@@ -102,10 +123,10 @@ export function planCycle(input: {
   const leaders = falling && (input.regime === "alt" || (median != null && median > 0.025));
 
   if (weeklyBull && (leaders || (broad && falling))) {
-    return { phase: "alt-season", cash: 0.08, btc: 0.28, altBudget: 0.64, maxNames: 2 };
+    return { phase: "alt-season", cash: 0, btc: 1, altBudget: SATELLITE_CAP, maxNames: 2 };
   }
   if (falling || input.regime === "alt") {
-    return { phase: "early-alt", cash: 0.1, btc: 0.62, altBudget: 0.28, maxNames: 1 };
+    return { phase: "early-alt", cash: 0, btc: 1, altBudget: SATELLITE_CAP, maxNames: 1 };
   }
   return { phase: "btc", cash: 0, btc: 1, altBudget: 0, maxNames: 0 };
 }
@@ -123,6 +144,7 @@ export function explainCycle(input: {
   btc: number;
   alt: number;
   names: CycleName[];
+  kind: VerdictKind;
 }): Pick<CyclePlan, "headline" | "why" | "flip"> {
   const pct = (n: number) => `${Math.round(n * 100)}`;
   const names = input.names
@@ -133,31 +155,32 @@ export function explainCycle(input: {
     .filter((row) => row.weight > 0)
     .map((row) => `${row.symbol} ${pct(row.weight)}%`)
     .join(", ");
+  const headline = bookSentence(input.kind);
 
   if (input.phase === "crash") {
     return {
-      headline: msg("نقد بمان", "Stay in cash"),
+      headline,
       why: msg(
-        "روند بیت‌کوین شکسته است: یا زیر میانگین ۲۰۰روزه با ساختار هفتگی نزولی، یا افت چهارهفته‌ای عمیق، یا هر دو ستون کلید قطع. آلت در این رژیم سخت‌تر از بیت‌کوین می‌ریزد. تمام دفتر تتر است تا آن سقوط تجربه نشود.",
-        "Bitcoin’s trend is broken: under the 200-day average with a bearish weekly structure, a deep four-week drop, or both kill-switch pillars. Alts fall harder than Bitcoin here. The whole book is tether so that drawdown is not held.",
+        "روند بیت‌کوین شکسته است: یا زیر میانگین ۲۰۰روزه با ساختار هفتگی شدید، یا افت چهارهفته‌ای عمیق. آلت در این رژیم سخت‌تر از بیت‌کوین می‌ریزد. تمام دفتر تتر است تا آن سقوط تجربه نشود.",
+        "Bitcoin’s trend is broken: under the 200-day average with a severe weekly structure, or a deep four-week drop. Alts fall harder than Bitcoin here. The whole book is tether so that drawdown is not held.",
       ),
       flip: msg(
-        "برگشت به بیت‌کوین فقط وقتی قیمت دوباره بالای میانگین ۲۰۰روزه باشد و ساختار هفتگی دیگر نزولی نباشد.",
-        "Bitcoin comes back only after price is back above the 200-day average and weekly structure is no longer bearish.",
+        "برگشت به بیت‌کوین فقط وقتی قیمت دوباره بالای میانگین ۲۰۰روزه باشد و ساختار هفتگی شدید نباشد، و افت چهارهفته‌ای از آستانهٔ سقوط برگشته باشد.",
+        "Bitcoin comes back only after price is back above the 200-day average, weekly structure is no longer severe, and the four-week drop has left the crash threshold.",
       ),
     };
   }
 
   if (input.phase === "defend") {
     return {
-      headline: msg("نقد بمان", "Stay in cash"),
+      headline,
       why: msg(
-        `یکی از ستون‌های روند بیت‌کوین خراب است، ولی هنوز شکست کامل نیست. ${pct(input.cash)}٪ نقد می‌ماند و ${pct(input.btc)}٪ فقط دیده‌بان بیت‌کوین است. آلت در این حالت بسته است، چون رالی آلت وسط روند خراب بیت‌کوین دوام نمی‌آورد.`,
-        `One of Bitcoin’s trend pillars is broken, but the break is not complete. ${pct(input.cash)}% stays in cash and ${pct(input.btc)}% is only a Bitcoin scout. Alts stay shut, because an alt rally does not last through a damaged Bitcoin trend.`,
+        "فقط یکی از دو ستون روند بیت‌کوین خراب است. این نقد شدن نیست. هسته نصف نمی‌شود: وزن هسته ۱۰۰٪ بیت‌کوین می‌ماند و قمر تازه باز نمی‌شود.",
+        "Only one of Bitcoin’s two trend pillars is broken. This is not cash. The core is not cut in half: the core weight stays 100% Bitcoin and a new satellite does not open.",
       ),
       flip: msg(
-        "اگر ستون دوم هم بشکند، دیده‌بان هم به نقد می‌رود. اگر هر دو ستون سالم شوند، دفتر به بیت‌کوین برمی‌گردد.",
-        "If the second pillar breaks, the scout goes to cash too. If both pillars heal, the book returns to Bitcoin.",
+        "اگر ستون دوم هم بشکند، یا افت چهارهفته‌ای به آستانهٔ سقوط برسد، دفتر به تتر می‌رود. اگر هر دو ستون سالم شوند، قمر دوباره اجازهٔ ورود دارد.",
+        "If the second pillar breaks, or the four-week drop hits the crash threshold, the book goes to tether. If both pillars heal, a satellite may open again.",
       ),
     };
   }
@@ -165,14 +188,14 @@ export function explainCycle(input: {
   if (input.stance === "alt" && input.names.length > 0) {
     const season = input.phase === "alt-season";
     return {
-      headline: msg("آلت بخر", "Buy the alt"),
+      headline,
       why: msg(
         season
-          ? `روند بیت‌کوین سالم است و آلت‌ها جلوترند. وزن اصلی روی لیدرهای نقدشونده است تا صعود بلند گرفته شود، نه روی تمام بازار: ${names}. ${pct(input.btc)}٪ بیت‌کوین لنگر می‌ماند و ${pct(input.cash)}٪ نقد است تا ته آلت‌سیزن دفتر را صفر نکند.`
-          : `چرخش شروع شده ولی هنوز فصل کامل نیست. یک لیدر، نه یک سبد شلوغ: ${names}. بقیه ${pct(input.btc)}٪ بیت‌کوین و ${pct(input.cash)}٪ نقد است.`,
+          ? `روند بیت‌کوین سالم است و آلت‌ها جلوترند. وزن هر قمر یک درصد ریسک تا حد ابطال ساختاری است و مجموع قمرها از یک‌سوم دفتر بیشتر نمی‌شود: ${names}. بقیه ${pct(input.btc)}٪ بیت‌کوین می‌ماند.`
+          : `چرخش شروع شده ولی هنوز فصل کامل نیست. یک لیدر، نه یک سبد شلوغ: ${names}. بقیه ${pct(input.btc)}٪ بیت‌کوین است.`,
         season
-          ? `Bitcoin’s trend is healthy and alts are leading. The main weight sits on liquid leaders so the long rally is held, not on the whole market: ${namesEn}. ${pct(input.btc)}% Bitcoin stays as the anchor and ${pct(input.cash)}% is cash so the end of alt season does not zero the book.`
-          : `Rotation has started but it is not a full season yet. One leader, not a crowded basket: ${namesEn}. The rest is ${pct(input.btc)}% Bitcoin and ${pct(input.cash)}% cash.`,
+          ? `Bitcoin’s trend is healthy and alts are leading. Each satellite risks one percent to its structural invalidation, and the satellites together stay under a third of the book: ${namesEn}. The other ${pct(input.btc)}% stays in Bitcoin.`
+          : `Rotation has started but it is not a full season yet. One leader, not a crowded basket: ${namesEn}. The rest is ${pct(input.btc)}% Bitcoin.`,
       ),
       flip: msg(
         "خروج آلت با ابطال همان نام، شکست ساختار هفتگی جفت، یا خراب شدن روند بیت‌کوین. خاموش شدن یک‌هفته‌ای دامیننس به‌تنهایی دلیل فروش نیست.",
@@ -183,27 +206,27 @@ export function explainCycle(input: {
 
   if (input.phase === "early-alt" || input.phase === "alt-season") {
     return {
-      headline: msg("بیت‌کوین بخر", "Buy Bitcoin"),
+      headline,
       why: msg(
-        "علامت چرخش هست، ولی هنوز هیچ آلتی هم دروازهٔ ساختاری را رد کرده و هم جای ورود دارد. تا آن نام پیدا شود دفتر بیت‌کوین می‌ماند، نه یک آلت تصادفی.",
-        "The rotation sign is on, but no alt has both cleared the structural gate and reached an entry. Until that name shows up the book stays in Bitcoin, not a random alt.",
+        "علامت چرخش هست، ولی هنوز هیچ آلتی هم ناحیهٔ تأییدشده دارد و هم ابطال ساختاری از کلوز جفت. تا آن نام پیدا شود دفتر بیت‌کوین می‌ماند، نه یک آلت تصادفی و نه نقد.",
+        "The rotation sign is on, but no alt has both a confirmed zone and a structural invalidation from the pair closes. Until that name shows up the book stays in Bitcoin, not a random alt and not cash.",
       ),
       flip: msg(
-        "با قرار گرفتن لیدر داخل محدوده، یا در فصل کامل با ساختار سالم جفت، بخشی از بیت‌کوین به همان آلت می‌رود.",
-        "When a leader trades inside its zone — or, in a full season, holds a healthy pair structure — part of the Bitcoin sleeve moves into that alt.",
+        "با قرار گرفتن لیدر داخل محدوده و با حمایت هفتگی قابل‌اندازه‌گیری روی جفت، بخشی از بیت‌کوین به همان آلت می‌رود. اندازه را فاصلهٔ حد تعیین می‌کند، نه بودجهٔ فصل.",
+        "When a leader trades inside its zone and the pair’s weekly support can be measured, part of the Bitcoin sleeve moves into that alt. The stop distance sets the size, not the season’s budget.",
       ),
     };
   }
 
   return {
-    headline: msg("بیت‌کوین بخر", "Buy Bitcoin"),
+    headline,
     why: msg(
-      "روند بیت‌کوین سالم است و آلت‌ها هنوز رهبری نمی‌کنند. خریدن آلت اینجا یعنی جا ماندن از خود بیت‌کوین و خوردن ریزش عمیق‌تر آلت. تمام دفتر بیت‌کوین است.",
-      "Bitcoin’s trend is healthy and alts are not leading yet. Buying an alt here means lagging Bitcoin and taking the deeper alt drawdown. The whole book is Bitcoin.",
+      "روند بیت‌کوین سالم است و آلت‌ها هنوز رهبری نمی‌کنند. خریدن آلت اینجا یعنی جا ماندن از خود بیت‌کوین. تمام دفتر بیت‌کوین است و قمر بسته است.",
+      "Bitcoin’s trend is healthy and alts are not leading yet. Buying an alt here means lagging Bitcoin. The whole book is Bitcoin and the satellite stays shut.",
     ),
     flip: msg(
-      "اگر دامیننس حدود سی‌روزه بیفتد و میانهٔ آلت‌ها جلو بیفتد، وزن به یک یا دو لیدر می‌رود. اگر ساختار هفتگی نزولی شود یا قیمت میانگین ۲۰۰روزه را از دست بدهد، دفتر به نقد برمی‌گردد.",
-      "If dominance falls over about thirty days and the median alt takes the lead, weight moves into one or two leaders. If weekly structure turns bearish or price loses the 200-day average, the book goes back to cash.",
+      "اگر دامیننس حدود سی‌روزه بیفتد یا رژیم آلت روشن شود، و یک نام هم ناحیه داشته باشد هم ابطال ساختاری، وزن به همان قمر می‌رود. نقد فقط وقتی هر دو ستون روند با هم بشکنند یا افت چهارهفته‌ای به آستانهٔ سقوط برسد.",
+      "If dominance falls over about thirty days or the alt regime turns on, and a name has both a zone and a structural invalidation, weight moves into that satellite. Cash is only when both trend pillars break together, or the four-week drop hits the crash threshold.",
     ),
   };
 }

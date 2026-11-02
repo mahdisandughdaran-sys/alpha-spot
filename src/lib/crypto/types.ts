@@ -41,6 +41,8 @@ export type BuySignal = "open" | "reduced" | "suspended";
 
 export type BtcKillSwitch = {
   status: KillSwitchStatus;
+  /** Same posture the book uses. Missing only on older stored runs. */
+  posture?: "cash" | "defend" | "core";
   active: boolean;
   aboveEma200: boolean | null;
   ema200: number | null;
@@ -90,6 +92,8 @@ export type CoinRow = {
   hasKlines: boolean;
   klineDays: number;
   pairSeries: PairPoint[];
+  /** Raw BTC-pair closes. The book builds the structural stop from these, not from the 30-day index. */
+  pairCloses?: number[];
   /** Indexed USD path. Used when the pick is Bitcoin and the BTC pair is flat. */
   spotIndex?: PairPoint[];
   turnover: number;
@@ -121,7 +125,7 @@ export type CoinRow = {
   factors: FactorScore[];
 };
 
-export type VerdictKind = "buy" | "wait" | "stay" | "cash";
+export type VerdictKind = "buy" | "wait" | "stay" | "hold" | "cash";
 
 export type SpotVerdict = {
   kind: VerdictKind;

@@ -1,4 +1,5 @@
 import { msg } from "@/lib/i18n/lex";
+import { bookSentence, deskPosture } from "./planner.ts";
 import { detectWeeklyStructure, ema, lookback, weeklySupportBroken } from "./math.ts";
 import type { BtcKillSwitch, BuySignal, KillSwitchStatus, WeeklyStructure } from "./types.ts";
 
@@ -74,8 +75,14 @@ export function evaluateKillSwitch(input: {
 
   const below = aboveEma200 === false;
   const status = classifyMacroRisk(below, severeWeekly);
-  const spotBuys = spotBuysFor(status);
-  const sizeMultiplier = status === "SUSPENDED" ? 0 : 1;
+  const posture = deskPosture({
+    status,
+    aboveEma200,
+    severeWeekly,
+    weeklyMomentum,
+  });
+  const spotBuys: BuySignal = posture === "cash" ? "suspended" : "open";
+  const sizeMultiplier = posture === "cash" ? 0 : 1;
 
   const emaBit =
     aboveEma200 == null
@@ -93,26 +100,27 @@ export function evaluateKillSwitch(input: {
 
   let headline = msg("روند بیت‌کوین سالم است", "Bitcoin’s trend is intact");
   let note = msg(
-    `${emaBit}. ${weekBit}. هسته بیت‌کوین است. نقد فقط وقتی هر دو شرط با هم بشکنند.`,
-    `${emaBit}. ${weekBit}. The core is Bitcoin. Cash is only when both conditions break together.`,
+    `${emaBit}. ${weekBit}. دفتر ۱۰۰٪ بیت‌کوین است و قمر بسته است، مگر قانون چرخش واقعاً روشن شود. نقد فقط وقتی هر دو ستون با هم بشکنند.`,
+    `${emaBit}. ${weekBit}. The book is 100% Bitcoin and the satellite is shut, unless the rotation rule actually turns on. Cash is only when both pillars break together.`,
   );
-  if (status === "SUSPENDED") {
-    headline = msg("کلید قطع · دفتر در تتر", "Kill switch · the book is in tether");
+  if (posture === "cash") {
+    headline = bookSentence("cash");
     note = msg(
-      `${emaBit}. ${weekBit}. هر دو شرط برقرار است. آلت صفر است و بیت‌کوین هم به تتر می‌رود. این تنها جایی است که «هیچ‌چیز نخر» درست است.`,
-      `${emaBit}. ${weekBit}. Both conditions are on. Alts are zero and Bitcoin goes to tether too. This is the only place “buy nothing” is right.`,
+      `${emaBit}. ${weekBit}. وزن دفتر ۱۰۰٪ تتر است و آلت صفر است. این تنها جایی است که «نقد بمان» درست است.`,
+      `${emaBit}. ${weekBit}. The book weight is 100% tether and alts are zero. This is the only place “stay in cash” is right.`,
     );
-  } else if (status === "HIGH_RISK") {
-    headline = msg("هسته را نگه دار · قمر بسته", "Hold the core · satellite closed");
+  } else if (posture === "defend") {
+    headline = bookSentence("hold");
     note = msg(
-      `${emaBit}. ${weekBit}. فقط یکی از دو شرط خراب است. این نقد شدن نیست و حجم هسته نصف نمی‌شود. قمر تازه باز نمی‌شود.`,
-      `${emaBit}. ${weekBit}. Only one of the two conditions is broken. This is not cash and the core is not cut in half. A new satellite does not open.`,
+      `${emaBit}. ${weekBit}. فقط یکی از دو ستون خراب است. وزن هسته ۱۰۰٪ بیت‌کوین می‌ماند و نصف نمی‌شود. قمر تازه باز نمی‌شود.`,
+      `${emaBit}. ${weekBit}. Only one of the two pillars is broken. The core weight stays 100% Bitcoin and is not cut in half. A new satellite does not open.`,
     );
   }
 
   return {
     status,
-    active: status !== "NORMAL",
+    posture,
+    active: posture !== "core",
     aboveEma200,
     ema200,
     priceUsd: input.priceUsd,

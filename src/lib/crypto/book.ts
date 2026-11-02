@@ -7,15 +7,14 @@ import {
   planCycle,
   stanceFromWeights,
   cycleMode,
+  SATELLITE_CAP,
+  RISK_FRACTION,
   type CyclePlan,
 } from "./planner.ts";
 import type { BtcKillSwitch, CoinRow, Regime, SpotVerdict } from "./types.ts";
 
-/** Together, satellites stay under one third of capital. Not a fitted weight. */
-export const SATELLITE_CAP = 0.32;
+export { SATELLITE_CAP, RISK_FRACTION } from "./planner.ts";
 export const SATELLITE_MAX = 2;
-/** Fraction of capital risked to the locked invalidation. */
-export const RISK_FRACTION = 0.01;
 export const VOLUME_FLOOR = 8_000_000;
 /** Free float below this is a veto, not a score. */
 export const FLOAT_VETO = 0.35;
@@ -139,11 +138,25 @@ function inZone(opp: Opportunity | undefined): boolean {
   return opp.status === "in-zone" || opp.status === "confirmed" || opp.status === "actionable";
 }
 
-function sizeFor(priceUsd: number, invalidationUsd: number): number | null {
+/** One percent of capital divided by the stop distance. The cap is applied to the sleeve, not here. */
+function riskWeight(priceUsd: number, invalidationUsd: number): number | null {
   if (!(priceUsd > invalidationUsd)) return null;
   const distance = (priceUsd - invalidationUsd) / priceUsd;
   if (!(distance >= 0.02)) return null;
-  return Math.min(SATELLITE_CAP, RISK_FRACTION / distance);
+  return RISK_FRACTION / distance;
+}
+
+/**
+ * Weekly support of the raw BTC pair. The 30-day index and a fixed 12% fallback
+ * are not a stop. Fewer than 56 daily closes cannot build eight weekly bars.
+ */
+export function structuralStop(
+  pairCloses: number[] | undefined,
+  priceUsd: number,
+): { invalidationUsd: number; distance: number } | null {
+  const closes = (pairCloses ?? []).filter((value) => value > 0);
+  if (closes.length < 56) return null;
+  return campaignInvalidation(closes, priceUsd);
 }
 
 function medianAltRs7(ranked: CoinRow[]): number | null {
@@ -209,6 +222,7 @@ export function decideBook(input: {
       btc: weights.btc,
       alt: weights.alt,
       names: weights.names,
+      kind: weights.verdict.kind,
     });
     const plan: CyclePlan = {
       phase: intent.phase,
@@ -280,30 +294,18 @@ export function decideBook(input: {
 
   if (mode === "defend") {
     const reason = msg(
-      "دفتر کوتاه شد. بیشتر سرمایه نقد می‌ماند و فقط دیده‌بان بیت‌کوین سر جایش است. آلت باز نمی‌شود.",
-      "The book is cut back. Most of the capital stays in cash and only a Bitcoin scout remains. No alt opens.",
+      "بیت‌کوین بماند، قمر بسته. فقط یک ستون خراب است. هسته ۱۰۰٪ بیت‌کوین می‌ماند و نصف نمی‌شود. قمر تازه باز نمی‌شود.",
+      "Bitcoin stays, satellite closed. Only one pillar is broken. The core stays 100% Bitcoin and is not cut in half. No new satellite opens.",
     );
-    const cashWeight = intent.cash;
-    const coreWeight = intent.btc;
-    const cash: Campaign = {
-      symbol: "USDT",
-      name: "Tether",
-      sleeve: "cash",
-      status: "open",
-      weight: cashWeight,
-      entryUsd: 1,
-      invalidationUsd: null,
-      reason,
-    };
     return pack({
-      cash: cashWeight,
-      btc: coreWeight,
+      cash: 0,
+      btc: 1,
       alt: 0,
       names: [],
-      campaigns: [cash, coreCampaign(coreWeight, reason)],
+      campaigns: [coreCampaign(1, reason)],
       candidate: null,
       verdict: {
-        kind: "stay",
+        kind: "hold",
         symbol: "BTC",
         name: btcName,
         priceUsd: btcPrice,
@@ -320,18 +322,18 @@ export function decideBook(input: {
     .sort((a, b) => b.score - a.score);
 
   const altPhase = intent.phase === "early-alt" || intent.phase === "alt-season";
-  const trend = intent.phase === "alt-season";
   const pool = altPhase ? structural.slice(0, Math.max(intent.maxNames, 1)) : [];
 
   let reachUsd: number | null = null;
   let candidate: Campaign | null = null;
-  const ready: { row: CoinRow; invalidation: number }[] = [];
+  const ready: { row: CoinRow; invalidation: number; risk: number }[] = [];
 
   for (const row of pool) {
     const opp = input.opportunities.find((item) => item.symbol === row.symbol);
     const zone = opp?.zone;
     const inside = inZone(opp);
-    if (input.pauseSatellites || (!inside && !trend)) {
+    const structured = structuralStop(row.pairCloses, row.priceUsd);
+    if (input.pauseSatellites || !inside || !structured) {
       if (!candidate) {
         reachUsd = zone && zone.low > 0 ? (row.priceUsd > zone.high ? zone.high : zone.low) : null;
         candidate = {
@@ -341,22 +343,27 @@ export function decideBook(input: {
           status: "waiting",
           weight: 0,
           entryUsd: inside ? row.priceUsd : null,
-          invalidationUsd: zone?.invalidation ?? null,
+          invalidationUsd: structured?.invalidationUsd ?? null,
           reason: input.pauseSatellites
             ? msg(
                 `${row.symbol} آماده است، ولی تقویم امروز آلت تازه باز نمی‌کند. تا آن وقت دفتر بیت‌کوین می‌ماند.`,
                 `${row.symbol} is ready, but the calendar does not open a new alt today. Until then the book stays in Bitcoin.`,
               )
-            : msg(
-                `${row.symbol} دروازهٔ ساختاری را دارد ولی هنوز در محدوده نیست. تا ورود، دفتر بیت‌کوین می‌ماند.`,
-                `${row.symbol} has cleared the structural gate but is not in the zone yet. Until the entry, the book stays in Bitcoin.`,
-              ),
+            : !inside
+              ? msg(
+                  `${row.symbol} دروازهٔ ساختاری را دارد ولی هنوز در محدودهٔ تأییدشده نیست. تا ورود، دفتر بیت‌کوین می‌ماند.`,
+                  `${row.symbol} has cleared the structural gate but is not in a confirmed zone yet. Until the entry, the book stays in Bitcoin.`,
+                )
+              : msg(
+                  `${row.symbol} در محدوده است، ولی حمایت هفتگی جفت از کلوز خام قابل‌اندازه‌گیری نیست. پوزیشن باز نمی‌شود.`,
+                  `${row.symbol} is in the zone, but weekly pair support cannot be measured from the raw closes. The position does not open.`,
+                ),
         };
       }
       continue;
     }
-    const invalidation = inside && zone?.invalidation ? zone.invalidation : trendStop(row);
-    if (invalidation == null || sizeFor(row.priceUsd, invalidation) == null) {
+    const risk = riskWeight(row.priceUsd, structured.invalidationUsd);
+    if (risk == null) {
       if (!candidate) {
         candidate = {
           symbol: row.symbol,
@@ -365,7 +372,7 @@ export function decideBook(input: {
           status: "waiting",
           weight: 0,
           entryUsd: row.priceUsd,
-          invalidationUsd: invalidation,
+          invalidationUsd: structured.invalidationUsd,
           reason: msg(
             `${row.symbol} در بازی است، ولی فاصله تا ابطال برای یک کمپین کافی نیست.`,
             `${row.symbol} is in play, but the distance to invalidation is not enough for a campaign.`,
@@ -375,25 +382,26 @@ export function decideBook(input: {
       }
       continue;
     }
-    ready.push({ row, invalidation });
+    ready.push({ row, invalidation: structured.invalidationUsd, risk });
   }
 
-  const count = ready.length;
-  const each = count > 0 ? Math.min(SATELLITE_CAP, intent.altBudget / count) : 0;
+  let room = Math.min(SATELLITE_CAP, Math.max(0, intent.altBudget));
   const open: Campaign[] = [];
   for (const item of ready) {
-    if (!(each > 0.01)) continue;
+    const weight = Math.min(room, item.risk);
+    if (!(weight > 0.01)) continue;
+    room -= weight;
     const campaign: Campaign = {
       symbol: item.row.symbol,
       name: item.row.name,
       sleeve: "satellite",
       status: "open",
-      weight: each,
+      weight,
       entryUsd: item.row.priceUsd,
       invalidationUsd: item.invalidation,
       reason: msg(
-        `${item.row.symbol} آستین آلت است، نه تمام دفتر. ابطال روی ${item.invalidation.toFixed(4)} قفل شد. به بازنده اضافه نکن.`,
-        `${item.row.symbol} is an alt sleeve, not the whole book. Invalidation is locked at ${item.invalidation.toFixed(4)}. Do not add to a loser.`,
+        `${item.row.symbol} آستین آلت است، نه تمام دفتر. وزن ${(weight * 100).toFixed(1)}٪ یعنی یک درصد ریسک تا ابطال ${item.invalidation.toFixed(4)}. به بازنده اضافه نکن.`,
+        `${item.row.symbol} is an alt sleeve, not the whole book. A weight of ${(weight * 100).toFixed(1)}% is one percent of risk to invalidation ${item.invalidation.toFixed(4)}. Do not add to a loser.`,
       ),
     };
     open.push(campaign);
@@ -401,8 +409,8 @@ export function decideBook(input: {
   }
 
   const used = open.reduce((sum, row) => sum + row.weight, 0);
-  const cashWeight = used > 0 ? intent.cash : 0;
-  const coreWeight = Math.max(0, 1 - used - cashWeight);
+  const cashWeight = 0;
+  const coreWeight = Math.max(0, 1 - used);
   const reason = msg(
     "دفتر چرخه ساخته شد.",
     "The cycle book was built.",
