@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, LoaderCircle } from "lucide-react";
@@ -76,7 +76,11 @@ import { plain, msg } from "@/lib/i18n/lex";
 import { useI18n } from "@/lib/i18n/locale";
 import { IntelDesk } from "@/components/desk/intel-desk";
 import { BuyMachine, SessionClocks } from "@/components/desk/buy-machine";
+import { OrderCard } from "@/components/desk/order-card";
 import { ProfitMachine } from "@/components/desk/profit-machine";
+import { bookMode } from "@/lib/crypto/book";
+import { HELD_EVENT, loadHeld } from "@/lib/crypto/held-spot";
+import { applyWatch } from "@/lib/crypto/spot-watch-client";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -111,7 +115,15 @@ function Home() {
     lagged: boolean;
     weak: FactorKey | null;
   } | null>(null);
+  const [heldSymbols, setHeldSymbols] = useState<string[]>([]);
   const booted = useRef(false);
+
+  useEffect(() => {
+    const syncHeld = () => setHeldSymbols(loadHeld().filter((row) => !row.closed).map((row) => row.symbol));
+    syncHeld();
+    window.addEventListener(HELD_EVENT, syncHeld);
+    return () => window.removeEventListener(HELD_EVENT, syncHeld);
+  }, []);
 
   useEffect(() => {
     let stop = false;
@@ -158,8 +170,8 @@ function Home() {
   const quoteSymbols = useMemo(() => {
     const base = ["BTC", "ETH", "SOL", "BNB", "XRP", "TON", "LINK", "AVAX", "SUI", "NEAR"];
     if (!result) return base;
-    return [...new Set([result.pick.symbol, ...result.top.slice(0, 24).map((row) => row.symbol), ...base])];
-  }, [result]);
+    return [...new Set([result.pick.symbol, ...result.top.slice(0, 24).map((row) => row.symbol), ...heldSymbols, ...base])];
+  }, [result, heldSymbols]);
 
   useEffect(() => {
     let stop = false;
@@ -188,6 +200,42 @@ function Home() {
       window.clearInterval(id);
     };
   }, [quoteSymbols, quotes]);
+
+  const pushWatch = useCallback(
+    (title: string, text: string) => {
+      const settings = loadDeskSettings();
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        try {
+          new Notification(title, { body: text });
+        } catch {
+          /* the frame blocked it */
+        }
+      }
+      if (!settings.telegramToken && !settings.webhookUrl) return;
+      void sendAlert({
+        data: {
+          title,
+          text,
+          kind: "alert",
+          orders: [],
+          webhookUrl: settings.webhookUrl,
+          telegramToken: settings.telegramToken,
+          telegramChat: settings.telegramChat,
+        },
+      }).catch(() => {
+        /* the desk still keeps the position */
+      });
+    },
+    [sendAlert],
+  );
+
+  useEffect(() => {
+    if (!result) return;
+    const { hits } = applyWatch(live, bookMode(result.killSwitch) === "cash");
+    for (const hit of hits) {
+      pushWatch(locale === "en" ? hit.titleEn : hit.titleFa, locale === "en" ? hit.textEn : hit.textFa);
+    }
+  }, [live, result, pushWatch, locale]);
 
   useEffect(() => {
     if (!result) return;
@@ -611,7 +659,10 @@ function Home() {
         <ProfitMachine />
 
         {status === "done" && result && tab === "machine" ? (
-          <BuyMachine result={result} live={live} />
+          <>
+            <OrderCard result={result} live={live} />
+            <BuyMachine result={result} live={live} />
+          </>
         ) : (
           <SessionClocks />
         )}

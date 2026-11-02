@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { HELD_EVENT } from "@/lib/crypto/held-spot";
 import { buildRebalancePlan } from "@/lib/crypto/rebalance";
 import type { AnalysisResult, DeskAction, HoldingInput } from "@/lib/crypto/types";
 import { useI18n } from "@/lib/i18n/locale";
@@ -54,7 +55,10 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
   const [size, setSize] = useState("");
 
   useEffect(() => {
-    setBook(loadBook());
+    const sync = () => setBook(loadBook());
+    sync();
+    window.addEventListener(HELD_EVENT, sync);
+    return () => window.removeEventListener(HELD_EVENT, sync);
   }, []);
 
   const options = useMemo(
@@ -99,8 +103,8 @@ export function MonitorPanel({ result }: { result: AnalysisResult }) {
         <h3 className="text-base font-medium text-fg">{tr("پایش سبد و چرخش", "Book watch and rotation")}</h3>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
           {tr(
-            "پوزیشن‌های اسپات خودتان را وارد کنید. اگر حمایت هفتگی ALT/BTC بشکند یا امتیاز زیر ۶۰ بیاید، سیگنال خروج و چرخش به برترین گزینه واجد شرایط صادر می‌شود. با کلید قطع، مقصد چرخش بیت‌کوین است.",
-            "Enter your own spot positions. If weekly ALT/BTC support breaks or the score falls under 60, the desk signals an exit and a rotation into the best qualified name. With the kill-switch on, the rotation target is Bitcoin.",
+            "پوزیشن‌هایی که از کارت سفارش ثبت شوند همین‌جا می‌آیند. اگر حمایت هفتگی ALT/BTC بشکند یا امتیاز زیر ۶۰ بیاید، سیگنال خروج و چرخش به برترین گزینه واجد شرایط صادر می‌شود. با کلید قطع، مقصد چرخش بیت‌کوین است.",
+            "Positions recorded from the order card show up here. If weekly ALT/BTC support breaks or the score falls under 60, the desk signals an exit and a rotation into the best qualified name. With the kill-switch on, the rotation target is Bitcoin.",
           )}
         </p>
         <p className="mt-2 text-xs text-subtle">{tr(plan.note)}</p>

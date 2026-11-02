@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loadDeskSettings, saveDeskSettings } from "@/lib/crypto/desk-client";
+import { CASH_EVENT, readCashConfirmed, writeCashConfirmed } from "@/lib/crypto/held-spot";
 import {
   buildMachineTicket,
   focusFromResult,
@@ -50,7 +51,7 @@ export function BuyMachine({
 }) {
   const { tr, locale } = useI18n();
   const rateFn = useServerFn(loadUsdtRate);
-  const [capital, setCapital] = useState(() => loadDeskSettings().capitalUsd);
+  const [capital, setCapital] = useState(0);
   const [riskPct, setRiskPct] = useState(1);
   const [holdsCore, setHoldsCore] = useState(false);
   const [filled, setFilled] = useState<Record<string, boolean>>({});
@@ -61,6 +62,7 @@ export function BuyMachine({
   useEffect(() => {
     setRiskPct(readRisk());
     setHoldsCore(readFlag(CORE_KEY));
+    setCapital(readTradingCash());
     setReady(true);
     let stop = false;
     void rateFn()
@@ -70,8 +72,11 @@ export function BuyMachine({
       .catch(() => {
         if (!stop) setToman(null);
       });
+    const onCash = () => setCapital(readTradingCash());
+    window.addEventListener(CASH_EVENT, onCash);
     return () => {
       stop = true;
+      window.removeEventListener(CASH_EVENT, onCash);
     };
   }, [rateFn]);
 
@@ -88,7 +93,9 @@ export function BuyMachine({
   function setCapitalUsd(next: number) {
     const safe = Math.max(0, next);
     setCapital(safe);
+    writeCashConfirmed(safe > 0);
     saveDeskSettings({ ...loadDeskSettings(), capitalUsd: safe });
+    window.dispatchEvent(new Event(CASH_EVENT));
   }
 
   function setRisk(next: number) {
@@ -414,6 +421,12 @@ function Stat({ k, v, tone }: { k: string; v: string; tone?: "warn" }) {
       <dd className={tone === "warn" ? "num mt-1 text-sm text-warn" : "num mt-1 text-sm text-fg"}>{v}</dd>
     </div>
   );
+}
+
+function readTradingCash(): number {
+  if (!readCashConfirmed()) return 0;
+  const saved = loadDeskSettings().capitalUsd;
+  return saved > 0 ? saved : 0;
 }
 
 function formatToman(n: number): string {

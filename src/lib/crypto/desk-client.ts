@@ -16,7 +16,7 @@ export type DeskSettings = {
 };
 
 export const defaultDeskSettings: DeskSettings = {
-  capitalUsd: 10_000,
+  capitalUsd: 0,
   webhookUrl: "",
   telegramToken: "",
   telegramChat: "",
@@ -57,7 +57,7 @@ export function loadDeskSettings(): DeskSettings {
     return {
       ...defaultDeskSettings,
       ...parsed,
-      capitalUsd: Number(parsed.capitalUsd) > 0 ? Number(parsed.capitalUsd) : 10_000,
+      capitalUsd: Number.isFinite(Number(parsed.capitalUsd)) && Number(parsed.capitalUsd) >= 0 ? Number(parsed.capitalUsd) : 0,
       scoreFloor: Number.isFinite(Number(parsed.scoreFloor)) ? Number(parsed.scoreFloor) : 60,
     };
   } catch {
