@@ -98,6 +98,13 @@ export function Methodology() {
       </ol>
       <div className="mt-6 grid gap-3 md:grid-cols-2">
         <Layer
+          t={tr("پشته اندیکاتور اسپات", "Spot indicator stack")}
+          d={tr(
+            "روی کندل روزانه، ایچیموکو، سوپرترند، ADX، هال، VWAP، پروفایل حجم، فشردگی بولینگر داخل کلتنر، استوکاستیک RSI، RSI کانرز، شیب مکدی، واگرایی، CMF، OBV و تغییر ساختار سویینگ یک رأی می‌سازند. تعقیب سقف، توزیع، یا نزول تأییدشده خرید را می‌بندد. اندازه کامل فقط وقتی می‌آید که امتیاز بالا، توافق رأی‌ها و فاز انباشت یا حرکت صعودی با هم باشند.",
+            "On the daily candle, Ichimoku, Supertrend, ADX, Hull, VWAP, volume profile, a Bollinger-inside-Keltner squeeze, Stochastic RSI, Connors RSI, MACD slope, divergence, CMF, OBV, and swing structure each cast a vote. A chase, distribution, or a confirmed markdown closes the buy. Full size requires a high score, vote agreement, and an accumulation or markup phase together.",
+          )}
+        />
+        <Layer
           t={tr("کلید قطع بیت‌کوین", "Bitcoin kill-switch")}
           d={tr(
             "زیر EMA ۲۰۰ روزانه یا ساختار هفتگی شدیداً نزولی (افت ۴ هفته بیش از ۸٪ یا شکست کف ۸ هفته) حجم را نصف می‌کند. هر دو با هم، خرید اسپات را معلق و وزن را به BTC برمی‌گرداند.",

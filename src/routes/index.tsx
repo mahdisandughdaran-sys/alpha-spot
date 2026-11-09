@@ -75,6 +75,7 @@ import { formatUsd } from "@/components/desk/format";
 import { plain, msg } from "@/lib/i18n/lex";
 import { useI18n } from "@/lib/i18n/locale";
 import { IntelDesk } from "@/components/desk/intel-desk";
+import { AlphaTape } from "@/components/desk/alpha-tape";
 import { BuyMachine, SessionClocks } from "@/components/desk/buy-machine";
 import { OrderCard } from "@/components/desk/order-card";
 import { ProfitMachine } from "@/components/desk/profit-machine";
@@ -655,6 +656,8 @@ function Home() {
           {headerMeta ? <p className="text-xs text-subtle">{headerMeta}</p> : null}
           {flash ? <p className="text-sm text-warn">{tr(flash)}</p> : null}
         </header>
+
+        <AlphaTape />
 
         <ProfitMachine />
 

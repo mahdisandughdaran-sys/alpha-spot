@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CoinMark } from "@/components/desk/coin-mark";
+import { AlphaStackPanel } from "@/components/desk/alpha-stack-panel";
 import { DeskCompare } from "@/components/desk/desk-compare";
 import { LocaleSwitch } from "@/components/desk/locale-switch";
 import { SpotLevelRuler, SpotPlanChart } from "@/components/desk/spot-plan-chart";
@@ -468,6 +469,8 @@ function PlanBody({
           </span>
         </div>
       </section>
+
+      <AlphaStackPanel stack={plan.stack} symbol={plan.symbol} price={formatSpotUsd(plan.price)} />
 
       <section className="grid gap-3 md:grid-cols-3">
         <LevelCard

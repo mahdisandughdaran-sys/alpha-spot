@@ -26,6 +26,7 @@ import {
   obvIsRising,
   weeklySupportBroken,
 } from "./math.ts";
+import { closeTrendBias } from "./alpha-stack.ts";
 import { emptyUnlock } from "./unlocks.ts";
 
 function along(parts: readonly string[], faSep: string, enSep = faSep): string {
@@ -459,6 +460,12 @@ function scoreTrend(d: CoinDraft): FactorScore {
   if (!d.hasKlines) {
     score -= 6;
     bits.push(msg("بدون کندل کافی؛ روند با دادهٔ کوتاه‌مدت تخمین زده شد", "Not enough candles; the trend was estimated from short-term data"));
+  }
+
+  const tilt = closeTrendBias(d.usdCloses, d.usdVolumes);
+  if (tilt.delta !== 0 && tilt.fa && tilt.en) {
+    score += tilt.delta;
+    bits.push(msg(tilt.fa, tilt.en));
   }
 
   return factor("trend", score, bits.length ? along(bits, "؛ ", "; ") : msg("روند متوسط.", "Average trend."));

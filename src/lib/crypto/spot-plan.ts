@@ -1,3 +1,4 @@
+import { buildAlphaStack, type AlphaStack } from "./alpha-stack.ts";
 import { detectWeeklyStructure, ema, rsi } from "./math.ts";
 import type { Horizon } from "./lens.ts";
 import { VALID_MS } from "./validity.ts";
@@ -77,6 +78,8 @@ export type SpotPlan = {
   sellDownEn: string;
   notes: { fa: string; en: string }[];
   chart: SpotChartPoint[];
+  /** Daily indicator stack that can veto or confirm the spot order. */
+  stack: AlphaStack;
 };
 
 export type SpotAssetRef = {
@@ -228,17 +231,44 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
   else action = "wait";
 
   let size: SpotSize = "half";
-  if (action === "exit" || (action === "wait" && regime === "bear")) size = "none";
-  else if (action === "buy" && regime === "bull" && (rsi14 == null || rsi14 < 68) && weekly !== "bear") size = "full";
-  else size = "half";
-  if (regime === "bear" && action === "buy") size = "half";
-
   let confidence: SpotConfidence = "low";
   if (tags.length >= 3 && regime !== "bear" && candles.length >= 180) confidence = "high";
   else if (tags.length >= 2 || (tags.length >= 1 && regime === "bull" && !broken)) confidence = "medium";
   if (weekly === "bear" && regime === "bull" && confidence === "high") confidence = "medium";
 
   if (candles.length < 60) confidence = "low";
+
+  const stack = buildAlphaStack(candles);
+  if (action === "buy" && (stack.bias === "avoid" || stack.sizeCap === "none")) action = "wait";
+  if (
+    action === "wait" &&
+    !broken &&
+    inZone &&
+    regime !== "bear" &&
+    stack.bias === "buy" &&
+    stack.veto == null &&
+    stack.score >= 70
+  ) {
+    action = "buy";
+  }
+
+  if (action === "exit" || stack.bias === "avoid" || (action === "wait" && regime === "bear")) size = "none";
+  else if (
+    action === "buy" &&
+    regime === "bull" &&
+    (rsi14 == null || rsi14 < 68) &&
+    weekly !== "bear" &&
+    stack.sizeCap === "full"
+  ) {
+    size = "full";
+  } else if (action === "buy") size = "half";
+  else size = "half";
+  if (action === "buy" && (stack.sizeCap === "half" || weekly === "bear" || regime === "bear")) size = "half";
+
+  if (stack.score >= 78 && action === "buy" && confidence === "medium" && stack.sizeCap === "full") {
+    confidence = "high";
+  }
+  if ((stack.bias === "avoid" || stack.veto) && confidence === "high") confidence = "medium";
 
   const chart = candles.slice(-140).map((bar, t) => ({
     t,
@@ -284,7 +314,7 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
     copy.buyEn = `Do not buy any coin. ${formatSpotUsd(buyFrom)} to ${formatSpotUsd(buyTo)} is only a watch zone. ${formatSpotUsd(entry)} is a level to watch, not a buy order.`;
   }
 
-  const notes =
+  const notes = (
     candles.length < 80
       ? [
           {
@@ -293,7 +323,8 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
           },
           ...copy.notes,
         ].slice(0, 5)
-      : copy.notes;
+      : copy.notes
+  ).concat([{ fa: stack.headlineFa, en: stack.headlineEn }]);
 
   return {
     symbol: asset.symbol,
@@ -331,6 +362,7 @@ export function buildSpotPlan(candles: SpotCandle[], asset: SpotAssetRef): SpotP
     holdFa: null,
     holdEn: null,
     notes,
+    stack,
   };
 }
 

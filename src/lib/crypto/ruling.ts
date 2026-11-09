@@ -119,7 +119,7 @@ export function buildDeskRuling(result: AnalysisResult): Ruling {
     );
   }
 
-  return { side, ...subject, whyBuy, whyPass };
+  return { side, subjectFa: subject.fa, subjectEn: subject.en, whyBuy, whyPass };
 }
 
 export function buildCallRuling(call: HorizonCall): Ruling {
