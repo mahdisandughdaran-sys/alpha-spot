@@ -8,6 +8,7 @@ import { AlphaStackPanel } from "@/components/desk/alpha-stack-panel";
 import { DeskCompare } from "@/components/desk/desk-compare";
 import { LocaleSwitch } from "@/components/desk/locale-switch";
 import { SpotLevelRuler, SpotPlanChart } from "@/components/desk/spot-plan-chart";
+import { TechnicalPanel } from "@/components/desk/technical-panel";
 import { formatPct, formatUntil, timeAgoFa } from "@/components/desk/format";
 import { loadSpotBoard, loadSpotDesk, type SpotBoard, type SpotBoardRow } from "@/lib/crypto/spot-desk";
 import { TOP_SPOT } from "@/lib/crypto/spot-assets";
@@ -517,6 +518,8 @@ function PlanBody({
           <SpotLevelRuler plan={plan} />
         </div>
       </section>
+
+      <TechnicalPanel defaultSymbol={plan.symbol} />
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Stat k="RSI ۱۴" v={plan.rsi == null ? "—" : plan.rsi.toFixed(0)} />

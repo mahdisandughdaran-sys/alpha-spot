@@ -28,6 +28,7 @@ import { ExecutePanel } from "@/components/desk/execute-panel";
 import { VenuePanel } from "@/components/desk/venue-panel";
 import { OpportunityPanel } from "@/components/desk/opportunity-panel";
 import { ConfluencePanel } from "@/components/desk/confluence-panel";
+import { TechnicalPanel } from "@/components/desk/technical-panel";
 import { ValidityBoard } from "@/components/desk/validity-board";
 import { runSpotAnalysis } from "@/lib/crypto/analyze";
 import type { WeightCuts } from "@/lib/crypto/lens";
@@ -85,7 +86,7 @@ import { applyWatch } from "@/lib/crypto/spot-watch-client";
 
 export const Route = createFileRoute("/")({ component: Home });
 
-type Tab = "machine" | "pick" | "macro" | "flow" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
+type Tab = "machine" | "ta" | "pick" | "macro" | "flow" | "opportunity" | "table" | "unlocks" | "portfolio" | "monitor" | "backtest" | "depth" | "execute" | "venue" | "method" | "history";
 
 function Home() {
   const { tr, locale } = useI18n();
@@ -107,6 +108,7 @@ function Home() {
   const [sync, setSync] = useState<"connecting" | "live" | "delayed">("connecting");
   const [lens, setLens] = useState<DeskFilter>("all");
   const [flowOnly, setFlowOnly] = useState(false);
+  const [techOnly, setTechOnly] = useState(false);
   const [ready, setReady] = useState(false);
   const [prefs, setPrefs] = useState<DeskPrefs | null>(null);
   const [report, setReport] = useState<{
@@ -507,6 +509,7 @@ function Home() {
     setStage(0);
     setTab("machine");
     setFlowOnly(false);
+    setTechOnly(false);
     const timer = window.setInterval(() => {
       setStage((s) => Math.min(s + 1, stages.length - 1));
     }, 1100);
@@ -607,6 +610,7 @@ function Home() {
                       setPrefs(null);
                       setStatus("idle");
                       setFlowOnly(false);
+                      setTechOnly(false);
                     }}
                   >
                     {tr("تغییر صرافی یا افق", "Change exchange or horizon")}
@@ -624,7 +628,27 @@ function Home() {
                 size="lg"
                 variant="outline"
                 onClick={() => {
+                  setFlowOnly(false);
+                  if (status === "done") {
+                    setTab("ta");
+                    setTechOnly(false);
+                  } else {
+                    setTechOnly(true);
+                  }
+                  window.setTimeout(() => {
+                    document.getElementById("technical")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 60);
+                }}
+                className="h-12 min-w-44"
+              >
+                {tr("تحلیل تکنیکال", "Technical read")}
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => {
                   setFlowOnly(true);
+                  setTechOnly(false);
                   setTab("flow");
                   setStatus((prev) => (prev === "done" ? prev : "idle"));
                 }}
@@ -674,6 +698,15 @@ function Home() {
 
         <MacroRail news={news} />
 
+        {status !== "done" && status !== "loading" && techOnly ? (
+          <div className="flex flex-col gap-4">
+            <button type="button" onClick={() => setTechOnly(false)} className="self-start text-sm text-muted">
+              {tr("بازگشت به معرفی میز", "Back to the desk intro")}
+            </button>
+            <TechnicalPanel defaultSymbol="BTC" />
+          </div>
+        ) : null}
+
         {status === "idle" && flowOnly ? (
           <div className="flex flex-col gap-4">
             <button type="button" onClick={() => setFlowOnly(false)} className="self-start text-sm text-muted">
@@ -683,9 +716,9 @@ function Home() {
           </div>
         ) : null}
 
-        {ready && !prefs && status !== "loading" && !flowOnly ? <PrefsGate onSave={commitPrefs} /> : null}
+        {ready && !prefs && status !== "loading" && !flowOnly && !techOnly ? <PrefsGate onSave={commitPrefs} /> : null}
 
-        {status !== "done" && status !== "loading" && !flowOnly ? <DeskCompare /> : null}
+        {status !== "done" && status !== "loading" && !flowOnly && !techOnly ? <DeskCompare /> : null}
 
         {status === "loading" ? (
           <section className="rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
@@ -750,6 +783,7 @@ function Home() {
               {(
                 [
                   ["machine", tr("بلیت", "Ticket")],
+                  ["ta", tr("تکنیکال", "Chart")],
                   ["pick", tr("انتخاب", "Pick")],
                   ["macro", tr("کلان", "Macro")],
                   ["flow", tr("همگرایی", "Confluence")],
@@ -780,6 +814,7 @@ function Home() {
                 </button>
               ))}
             </nav>
+            {tab === "ta" ? <TechnicalPanel defaultSymbol={result.pick.symbol || "BTC"} /> : null}
             {tab === "pick" ? <PickPanel result={result} live={live} /> : null}
             {tab === "macro" ? <MacroRail news={news} mode="full" /> : null}
             {tab === "flow" ? <ConfluencePanel key={result.pick.symbol} defaultSymbol={result.pick.symbol} /> : null}
